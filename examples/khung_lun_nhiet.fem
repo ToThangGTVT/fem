@@ -1,0 +1,33 @@
+FEM2D 1
+# Đơn vị: kN, m, °C. Chỉ số đánh từ 1.
+TITLE "Khung chịu lún gối và nhiệt độ"
+PLANE STRESS
+
+# MATERIAL tên E nu alpha gamma
+MATERIAL "Bê tông B25" 30000000 0.2 1e-05 25
+# SECTION tên A I h
+SECTION "CN 30x50" 0.15 0.003125 0.5
+
+# NODE x y
+NODE 0 0
+NODE 0 4
+NODE 8 4
+NODE 8 0
+
+# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im
+FRAME 1 2 1 1 0 0 0
+FRAME 2 3 1 1 0 0 0
+FRAME 4 3 1 1 0 0 0
+
+# SUPPORT nút khóa_x khóa_y khóa_φ kx ky kφ
+SUPPORT 1 1 1 1 0 0 0
+SUPPORT 4 1 1 0 0 0 0
+
+# LOADCASE tên hệ_số_TLBT
+#   NLOAD nút Fx Fy Mz
+#   ELOAD pt DIST hướng q1 q2 chiếu | POINT hướng P a | MOMENT M a | TEMP t Δt
+#   DISP nút UX|UY|RZ giá_trị   (hướng: LX LY GX GY)
+LOADCASE "Lún gối phải 2 cm" 0
+  DISP 4 UY -0.02
+LOADCASE "Nhiệt độ dầm: t = +20°C, Δt = 15°C" 0
+  ELOAD 2 TEMP 20 15

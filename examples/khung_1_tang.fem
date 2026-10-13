@@ -1,0 +1,38 @@
+FEM2D 1
+# Đơn vị: kN, m, °C. Chỉ số đánh từ 1.
+TITLE "Khung một tầng một nhịp, chân ngàm"
+PLANE STRESS
+
+# MATERIAL tên E nu alpha gamma
+MATERIAL "Bê tông B20" 27500000 0.2 1e-05 25
+# SECTION tên A I h
+SECTION "CN 30x40" 0.12 0.0016 0.4
+SECTION "CN 30x60" 0.18 0.0054 0.6
+
+# NODE x y
+NODE 0 0
+NODE 0 4
+NODE 6 4
+NODE 6 0
+
+# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im
+FRAME 1 2 1 1 0 0 0
+FRAME 2 3 1 2 0 0 0
+FRAME 4 3 1 1 0 0 0
+
+# SUPPORT nút khóa_x khóa_y khóa_φ kx ky kφ
+SUPPORT 1 1 1 1 0 0 0
+SUPPORT 4 1 1 1 0 0 0
+
+# LOADCASE tên hệ_số_TLBT
+#   NLOAD nút Fx Fy Mz
+#   ELOAD pt DIST hướng q1 q2 chiếu | POINT hướng P a | MOMENT M a | TEMP t Δt
+#   DISP nút UX|UY|RZ giá_trị   (hướng: LX LY GX GY)
+LOADCASE "Tĩnh tải" 0
+  ELOAD 2 DIST GY -15 -15 0
+LOADCASE "Gió trái" 0
+  NLOAD 2 10 0 0
+  ELOAD 1 DIST GX 2.4 2.4 0
+
+# COMBO tên trường_hợp hệ_số ...
+COMBO "TT + 0,9Gió" 1 1 2 0.9

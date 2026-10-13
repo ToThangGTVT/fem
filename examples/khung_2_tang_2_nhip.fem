@@ -1,0 +1,60 @@
+FEM2D 1
+# Đơn vị: kN, m, °C. Chỉ số đánh từ 1.
+TITLE "Khung 2 tầng 2 nhịp"
+PLANE STRESS
+
+# MATERIAL tên E nu alpha gamma
+MATERIAL "Bê tông B25" 30000000 0.2 1e-05 25
+# SECTION tên A I h
+SECTION "CN 30x30" 0.09 0.000675 0.3
+SECTION "CN 25x50" 0.125 0.00260416666667 0.5
+
+# NODE x y
+NODE 0 0
+NODE 6 0
+NODE 12 0
+NODE 0 3.6
+NODE 6 3.6
+NODE 12 3.6
+NODE 0 7.2
+NODE 6 7.2
+NODE 12 7.2
+
+# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im
+FRAME 1 4 1 1 0 0 0
+FRAME 2 5 1 1 0 0 0
+FRAME 3 6 1 1 0 0 0
+FRAME 4 7 1 1 0 0 0
+FRAME 5 8 1 1 0 0 0
+FRAME 6 9 1 1 0 0 0
+FRAME 4 5 1 2 0 0 0
+FRAME 5 6 1 2 0 0 0
+FRAME 7 8 1 2 0 0 0
+FRAME 8 9 1 2 0 0 0
+
+# SUPPORT nút khóa_x khóa_y khóa_φ kx ky kφ
+SUPPORT 1 1 1 1 0 0 0
+SUPPORT 2 1 1 1 0 0 0
+SUPPORT 3 1 1 1 0 0 0
+
+# LOADCASE tên hệ_số_TLBT
+#   NLOAD nút Fx Fy Mz
+#   ELOAD pt DIST hướng q1 q2 chiếu | POINT hướng P a | MOMENT M a | TEMP t Δt
+#   DISP nút UX|UY|RZ giá_trị   (hướng: LX LY GX GY)
+LOADCASE "Tĩnh tải" 1
+  ELOAD 7 DIST GY -18 -18 0
+  ELOAD 8 DIST GY -18 -18 0
+  ELOAD 9 DIST GY -18 -18 0
+  ELOAD 10 DIST GY -18 -18 0
+LOADCASE "Hoạt tải" 0
+  ELOAD 7 DIST GY -9 -9 0
+  ELOAD 8 DIST GY -9 -9 0
+  ELOAD 9 DIST GY -9 -9 0
+  ELOAD 10 DIST GY -9 -9 0
+LOADCASE "Gió X" 0
+  NLOAD 4 12 0 0
+  NLOAD 7 7 0 0
+
+# COMBO tên trường_hợp hệ_số ...
+COMBO "TH cơ bản 1: TT + HT" 1 1 2 1
+COMBO "TH cơ bản 2: TT + 0,9(HT + Gió)" 1 1 2 0.9 3 0.9

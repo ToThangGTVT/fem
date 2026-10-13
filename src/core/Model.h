@@ -1,0 +1,146 @@
+// Mô hình kết cấu phẳng (2D) cho phương pháp phần tử hữu hạn.
+// Đơn vị thống nhất: kN, m, °C. Hệ tọa độ tổng thể: X sang phải, Y hướng lên, góc xoay ngược chiều kim đồng hồ dương.
+// Mỗi nút có 3 bậc tự do: ux, uy, φz (các bậc tự do không có độ cứng sẽ được tự động khóa khi tính).
+#pragma once
+#include <array>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace fem {
+
+enum class ElemType { Truss, Frame, Tri3, Quad4 };
+enum class PlaneMode { Stress, Strain };   // ứng suất phẳng / biến dạng phẳng
+
+enum Dof { UX = 0, UY = 1, RZ = 2 };
+
+struct Node {
+    double x = 0, y = 0;
+};
+
+struct Material {
+    std::string name = "Vật liệu";
+    double E = 2.1e8;      // mô đun đàn hồi, kN/m²
+    double nu = 0.3;       // hệ số Poisson
+    double alpha = 1.2e-5; // hệ số giãn nở nhiệt, 1/°C
+    double gamma = 78.5;   // trọng lượng riêng, kN/m³
+};
+
+struct Section {
+    std::string name = "Tiết diện";
+    double A = 0.01;  // diện tích, m²
+    double I = 1e-5;  // mômen quán tính, m⁴
+    double h = 0.2;   // chiều cao (tính ứng suất thớ biên, tải nhiệt), m
+};
+
+struct Element {
+    ElemType type = ElemType::Frame;
+    std::array<int, 4> n{-1, -1, -1, -1};
+    int mat = 0;
+    int sec = 0;              // thanh: chỉ số tiết diện
+    double t = 0.1;           // phần tử phẳng: chiều dày, m
+    bool hingeI = false;      // khớp tại đầu i (giải phóng mômen)
+    bool hingeJ = false;      // khớp tại đầu j
+    double kf = 0;            // hệ số nền Winkler × bề rộng, kN/m² (dầm trên nền đàn hồi)
+    bool incompatible = true; // Quad4: dùng mode không tương thích (Wilson/Taylor QM6)
+
+    int nodeCount() const {
+        switch (type) {
+        case ElemType::Truss:
+        case ElemType::Frame: return 2;
+        case ElemType::Tri3: return 3;
+        case ElemType::Quad4: return 4;
+        }
+        return 0;
+    }
+    bool isBar() const { return type == ElemType::Truss || type == ElemType::Frame; }
+    bool isPlane() const { return !isBar(); }
+};
+
+struct Support {
+    int node = -1;
+    std::array<bool, 3> fix{false, false, false}; // khóa ux, uy, φz
+    std::array<double, 3> k{0, 0, 0};             // lò xo (gối đàn hồi): kN/m, kN/m, kNm/rad
+    bool empty() const { return !fix[0] && !fix[1] && !fix[2] && k[0] == 0 && k[1] == 0 && k[2] == 0; }
+};
+
+struct NodalLoad {
+    int node = -1;
+    std::array<double, 3> F{0, 0, 0}; // Fx, Fy (kN), Mz (kNm)
+};
+
+enum class ElemLoadKind { Distributed, Point, Moment, Temperature };
+enum class LoadDir { LocalX, LocalY, GlobalX, GlobalY };
+
+struct ElemLoad {
+    int elem = -1;
+    ElemLoadKind kind = ElemLoadKind::Distributed;
+    LoadDir dir = LoadDir::GlobalY;
+    // Distributed: q1, q2 = cường độ tại đầu i, j (kN/m), hình thang tuyến tính trên toàn thanh
+    // Point:       q1 = P (kN), a = khoảng cách từ đầu i (m)
+    // Moment:      q1 = M (kNm, ngược chiều kim đồng hồ dương), a = khoảng cách từ đầu i
+    // Temperature: q1 = độ tăng nhiệt trung bình t (°C), q2 = t_dưới − t_trên (°C)
+    double q1 = 0, q2 = 0;
+    double a = 0;
+    bool projected = false; // tải phân bố theo phương tổng thể tính trên chiều dài hình chiếu
+};
+
+struct PrescribedDisp {
+    int node = -1;
+    int dof = UY;
+    double value = 0; // m hoặc rad
+};
+
+struct LoadCase {
+    LoadCase() = default;
+    LoadCase(std::string n, double sw = 0) : name(std::move(n)), selfWeight(sw) {}
+    std::string name = "TH1";
+    double selfWeight = 0; // hệ số trọng lượng bản thân (0 = không xét)
+    std::vector<NodalLoad> nodal;
+    std::vector<ElemLoad> elem;
+    std::vector<PrescribedDisp> disp; // chuyển vị cưỡng bức của gối
+};
+
+struct Combo {
+    Combo() = default;
+    Combo(std::string n, std::vector<std::pair<int, double>> t) : name(std::move(n)), terms(std::move(t)) {}
+    std::string name = "THop1";
+    std::vector<std::pair<int, double>> terms; // (chỉ số trường hợp tải, hệ số)
+};
+
+struct Model {
+    std::string title;
+    PlaneMode planeMode = PlaneMode::Stress;
+    std::vector<Node> nodes;
+    std::vector<Material> materials;
+    std::vector<Section> sections;
+    std::vector<Element> elements;
+    std::vector<Support> supports;
+    std::vector<LoadCase> cases;
+    std::vector<Combo> combos;
+
+    void clear();
+    int findNode(double x, double y, double tol) const;
+    int addNode(double x, double y, double tol = 1e-9); // gộp nút trùng
+    int findElement(ElemType type, const std::array<int, 4>& n) const;
+    Support* supportAt(int node);
+    const Support* supportAt(int node) const;
+    Support& supportFor(int node);
+    void cleanSupports();
+    // Xóa nút (kèm các phần tử, gối, tải liên quan) và đánh số lại.
+    void removeNodes(std::vector<int> ids);
+    // Xóa phần tử (kèm tải trên phần tử) và đánh số lại.
+    void removeElements(std::vector<int> ids);
+    void removeUnusedNodes();
+    double barLength(int e) const;
+    bool hasPlane() const;
+    bool hasBars() const;
+    void bounds(double& x0, double& y0, double& x1, double& y1) const;
+};
+
+const char* elemTypeName(ElemType t);
+const char* loadKindName(ElemLoadKind k);
+const char* loadDirName(LoadDir d);
+const char* dofName(int dof);
+
+} // namespace fem

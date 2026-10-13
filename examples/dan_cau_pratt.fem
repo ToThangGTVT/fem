@@ -1,0 +1,61 @@
+FEM2D 1
+# Đơn vị: kN, m, °C. Chỉ số đánh từ 1.
+TITLE "Dàn cầu 6 khoang, nhịp 18 m, cao 3 m"
+PLANE STRESS
+
+# MATERIAL tên E nu alpha gamma
+MATERIAL "Thép CCT38" 210000000 0.3 1.2e-05 78.5
+# SECTION tên A I h
+SECTION "2L75x6" 0.001756 0 0.075
+
+# NODE x y
+NODE 0 0
+NODE 3 0
+NODE 6 0
+NODE 9 0
+NODE 12 0
+NODE 15 0
+NODE 18 0
+NODE 3 3
+NODE 6 3
+NODE 9 3
+NODE 12 3
+NODE 15 3
+
+# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im
+TRUSS 1 2 1 1
+TRUSS 2 3 1 1
+TRUSS 3 4 1 1
+TRUSS 4 5 1 1
+TRUSS 5 6 1 1
+TRUSS 6 7 1 1
+TRUSS 8 9 1 1
+TRUSS 9 10 1 1
+TRUSS 10 11 1 1
+TRUSS 11 12 1 1
+TRUSS 1 8 1 1
+TRUSS 7 12 1 1
+TRUSS 2 8 1 1
+TRUSS 3 9 1 1
+TRUSS 4 10 1 1
+TRUSS 5 11 1 1
+TRUSS 6 12 1 1
+TRUSS 8 3 1 1
+TRUSS 9 4 1 1
+TRUSS 4 11 1 1
+TRUSS 5 12 1 1
+
+# SUPPORT nút khóa_x khóa_y khóa_φ kx ky kφ
+SUPPORT 1 1 1 0 0 0 0
+SUPPORT 7 0 1 0 0 0 0
+
+# LOADCASE tên hệ_số_TLBT
+#   NLOAD nút Fx Fy Mz
+#   ELOAD pt DIST hướng q1 q2 chiếu | POINT hướng P a | MOMENT M a | TEMP t Δt
+#   DISP nút UX|UY|RZ giá_trị   (hướng: LX LY GX GY)
+LOADCASE "Tải nút dàn dưới" 0
+  NLOAD 2 0 -40 0
+  NLOAD 3 0 -40 0
+  NLOAD 4 0 -40 0
+  NLOAD 5 0 -40 0
+  NLOAD 6 0 -40 0

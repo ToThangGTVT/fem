@@ -1,0 +1,42 @@
+FEM2D 1
+# Đơn vị: kN, m, °C. Chỉ số đánh từ 1.
+TITLE "Dầm tĩnh định nhiều nhịp (dầm Gerber)"
+PLANE STRESS
+
+# MATERIAL tên E nu alpha gamma
+MATERIAL "Thép CCT34" 210000000 0.3 1.2e-05 78.5
+# SECTION tên A I h
+SECTION "I27" 0.00402 5.01e-05 0.27
+
+# NODE x y
+NODE 0 0
+NODE 6 0
+NODE 8 0
+NODE 12 0
+NODE 14 0
+NODE 20 0
+
+# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im
+FRAME 1 2 1 1 0 0 0
+FRAME 2 3 1 1 0 1 0
+FRAME 3 4 1 1 0 0 0
+FRAME 4 5 1 1 0 1 0
+FRAME 5 6 1 1 0 0 0
+
+# SUPPORT nút khóa_x khóa_y khóa_φ kx ky kφ
+SUPPORT 1 1 1 0 0 0 0
+SUPPORT 2 0 1 0 0 0 0
+SUPPORT 4 0 1 0 0 0 0
+SUPPORT 6 0 1 0 0 0 0
+
+# LOADCASE tên hệ_số_TLBT
+#   NLOAD nút Fx Fy Mz
+#   ELOAD pt DIST hướng q1 q2 chiếu | POINT hướng P a | MOMENT M a | TEMP t Δt
+#   DISP nút UX|UY|RZ giá_trị   (hướng: LX LY GX GY)
+LOADCASE "Tải trọng" 0
+  ELOAD 1 DIST GY -10 -10 0
+  ELOAD 2 DIST GY -10 -10 0
+  ELOAD 3 DIST GY -10 -10 0
+  ELOAD 4 DIST GY -10 -10 0
+  ELOAD 5 DIST GY -10 -10 0
+  ELOAD 3 POINT GY -30 2

@@ -1,0 +1,34 @@
+FEM2D 1
+# Đơn vị: kN, m, °C. Chỉ số đánh từ 1.
+TITLE "Khung ba khớp nhịp 8 m, cao 5 m"
+PLANE STRESS
+
+# MATERIAL tên E nu alpha gamma
+MATERIAL "Thép CCT38" 210000000 0.3 1.2e-05 78.5
+# SECTION tên A I h
+SECTION "I36" 0.00619 0.0001338 0.36
+
+# NODE x y
+NODE 0 0
+NODE 0 5
+NODE 4 6
+NODE 8 5
+NODE 8 0
+
+# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im
+FRAME 1 2 1 1 0 0 0
+FRAME 2 3 1 1 0 1 0
+FRAME 3 4 1 1 0 0 0
+FRAME 5 4 1 1 0 0 0
+
+# SUPPORT nút khóa_x khóa_y khóa_φ kx ky kφ
+SUPPORT 1 1 1 0 0 0 0
+SUPPORT 5 1 1 0 0 0 0
+
+# LOADCASE tên hệ_số_TLBT
+#   NLOAD nút Fx Fy Mz
+#   ELOAD pt DIST hướng q1 q2 chiếu | POINT hướng P a | MOMENT M a | TEMP t Δt
+#   DISP nút UX|UY|RZ giá_trị   (hướng: LX LY GX GY)
+LOADCASE "Tải mái" 0
+  ELOAD 2 DIST GY -12 -12 1
+  ELOAD 3 DIST GY -12 -12 1
