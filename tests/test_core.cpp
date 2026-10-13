@@ -5,6 +5,7 @@
 #include <string>
 
 #include "core/Analysis.h"
+#include "core/Eigen.h"
 #include "core/Examples.h"
 #include "core/Library.h"
 #include "core/Mesher.h"
@@ -582,7 +583,168 @@ static void testEdgeLoad() {
     near("Trùng với lực nút của ví dụ", fx2, fx1, 1e-9);
 }
 
+static Model columnModel(double L, double E, double A, double I) {
+    Model m = beamModel(L, 1, E, A, I);
+    m.nodes[1] = {0, L}; // cột thẳng đứng
+    m.cases[0].nodal.push_back({1, {0, -1, 0}});
+    return m;
+}
+
+static void testEigenSolver() {
+    std::puts("Bộ giải trị riêng đối xứng");
+    const int n = 6;
+    std::vector<double> A(n * n);
+    for (int i = 0; i < n; ++i)
+        for (int j = 0; j <= i; ++j) A[i * n + j] = A[j * n + i] = std::sin(1.3 * i + 0.7 * j) + (i == j ? 3.0 * i : 0.0);
+    std::vector<double> A0 = A, d, V;
+    symmetricEigen(n, A, d, V);
+    double res = 0, orth = 0;
+    for (int k = 0; k < n; ++k)
+        for (int i = 0; i < n; ++i) {
+            double av = 0;
+            for (int j = 0; j < n; ++j) av += A0[i * n + j] * V[j * n + k];
+            res = std::max(res, std::abs(av - d[k] * V[i * n + k]));
+            for (int l = 0; l < n; ++l) {
+                double dot = 0;
+                for (int j = 0; j < n; ++j) dot += V[j * n + k] * V[j * n + l];
+                orth = std::max(orth, std::abs(dot - (k == l ? 1.0 : 0.0)));
+            }
+        }
+    check(res < 1e-10 && orth < 1e-10, "A·v = λ·v, VᵀV = I", res + orth, 0);
+    bool sorted = true;
+    for (int k = 1; k < n; ++k) sorted &= d[k] >= d[k - 1];
+    check(sorted, "trị riêng tăng dần", 0, 0);
+}
+
+static void testBuckling() {
+    std::puts("Ổn định: lực tới hạn Euler");
+    const double L = 5, E = 2.1e8, A = 46.5e-4, I = 7080e-8, EI = E * I, pi = M_PI;
+    EigenOptions o;
+    o.kind = EigenKind::Buckling;
+    o.modes = 3;
+    {
+        Model m = columnModel(L, E, A, I);
+        fix(m, 0, true, true, false);
+        fix(m, 1, true, false, false);
+        auto r = eigenAnalysis(m, o);
+        check(r.ok, r.error.c_str(), 0, 0);
+        if (r.ok) {
+            near("Hai đầu khớp: P = π²EI/L²", r.modes[0].lambda, pi * pi * EI / (L * L), 1e-4);
+            near("Dạng 2: 4π²EI/L²", r.modes[1].lambda, 4 * pi * pi * EI / (L * L), 1e-3);
+            near("μ = 1", effectiveLengthFactor(m, r, 0), 1.0, 1e-4);
+        }
+    }
+    {
+        Model m = columnModel(L, E, A, I);
+        fix(m, 0, true, true, true);
+        auto r = eigenAnalysis(m, o);
+        if (r.ok) {
+            near("Công-xôn: P = π²EI/4L²", r.modes[0].lambda, pi * pi * EI / (4 * L * L), 1e-4);
+            near("Công-xôn: μ = 2", effectiveLengthFactor(m, r, 0), 2.0, 1e-4);
+        }
+    }
+    {
+        Model m = columnModel(L, E, A, I);
+        fix(m, 0, true, true, true);
+        fix(m, 1, true, false, false);
+        auto r = eigenAnalysis(m, o);
+        if (r.ok) near("Ngàm – khớp: P = 20,19·EI/L² (sai số rời rạc < 0,05%)", r.modes[0].lambda, 20.1907 * EI / (L * L), 5e-4);
+    }
+    {
+        // gối ngàm cả hai đầu nhưng thanh có khớp hai đầu → tương đương hai đầu khớp
+        Model m = columnModel(L, E, A, I);
+        fix(m, 0, true, true, true);
+        fix(m, 1, true, false, true);
+        m.elements[0].hingeI = m.elements[0].hingeJ = true;
+        auto r = eigenAnalysis(m, o);
+        if (r.ok) near("Khớp đầu thanh: P = π²EI/L²", r.modes[0].lambda, pi * pi * EI / (L * L), 1e-4);
+    }
+    {
+        Model m = columnModel(L, E, A, I);
+        fix(m, 0, true, true, false);
+        fix(m, 1, true, false, false);
+        m.cases[0].nodal[0].F[1] = +1; // kéo
+        auto r = eigenAnalysis(m, o);
+        check(!r.ok, "thanh chịu kéo không mất ổn định", 0, 0);
+    }
+}
+
+static void testVibration() {
+    std::puts("Dao động riêng");
+    const double L = 6, E = 3e7, b = 0.3, h = 0.5, A = b * h, I = b * h * h * h / 12, gamma = 25;
+    const double rhoA = gamma / 9.81 * A, EI = E * I, pi = M_PI;
+    EigenOptions o;
+    o.kind = EigenKind::Vibration;
+    o.modes = 4;
+    o.subdiv = 12;
+    {
+        Model m = beamModel(L, 1, E, A, I);
+        fix(m, 0, true, true, false);
+        fix(m, 1, false, true, false);
+        auto r = eigenAnalysis(m, o);
+        check(r.ok, r.error.c_str(), 0, 0);
+        if (r.ok) {
+            const double w1 = pi * pi * std::sqrt(EI / (rhoA * std::pow(L, 4)));
+            near("Dầm đơn giản: ω1 = π²√(EI/mL⁴)", r.modes[0].omega, w1, 1e-4);
+            near("Dầm đơn giản: ω2 = 4ω1", r.modes[1].omega, 4 * w1, 1e-3);
+            near("Chu kỳ T = 2π/ω", r.modes[0].period, 2 * pi / w1, 1e-4);
+        }
+    }
+    {
+        Model m = beamModel(L, 1, E, A, I);
+        fix(m, 0, true, true, true);
+        auto r = eigenAnalysis(m, o);
+        if (r.ok) near("Công-xôn: ω1 = 1,8751²√(EI/mL⁴)", r.modes[0].omega,
+                        1.875104 * 1.875104 * std::sqrt(EI / (rhoA * std::pow(L, 4))), 1e-4);
+    }
+    {
+        // cột không trọng lượng mang khối lượng tập trung W/g ở đỉnh: ω = √(3EI/(mL³))
+        const double H = 4, W = 200;
+        Model m = columnModel(H, E, A, I);
+        m.cases[0].nodal[0].F[1] = -W;
+        fix(m, 0, true, true, true);
+        o.selfMassFactor = 0;
+        o.massSet = 0;
+        auto r = eigenAnalysis(m, o);
+        if (r.ok) near("Hệ 1 bậc tự do: ω = √(3EI/mH³)", r.modes[0].omega, std::sqrt(3 * EI / (W / 9.81 * H * H * H)), 1e-4);
+    }
+}
+
+static void testComboGenerator() {
+    std::puts("Sinh tổ hợp theo TCVN 2737:1995");
+    Model m = beamModel(6, 1, 2e8, 0.01, 1e-4);
+    fix(m, 0, true, true, false);
+    fix(m, 1, false, true, false);
+    m.cases = {LoadCase("TT"), LoadCase("HT"), LoadCase("Gió trái"), LoadCase("Gió phải")};
+    m.cases[0].gammaF = 1.1;
+    for (int i = 1; i < 4; ++i) m.cases[i].kind = 1;
+    m.cases[1].gammaF = 1.2;
+    m.cases[2].group = m.cases[3].group = 1;
+    m.cases[1].nodal.push_back({1, {0, -10, 0}});
+    m.combos.push_back(Combo("THủ công", {{0, 1.0}}));
+    const int n = generateCombos(m);
+    check(n == 5, "3 tổ hợp CB1 + 2 tổ hợp CB2 (gió trái/phải loại trừ)", n, 5);
+    check(m.combos.size() == 6 && !m.combos[0].generated, "giữ tổ hợp thủ công", (double)m.combos.size(), 6);
+    if (m.combos.size() == 6) {
+        const Combo& c = m.combos[4]; // CB2 đầu tiên: TT + 0,9(HT + Gió trái)
+        check(c.terms.size() == 3, "CB2 có 3 thành phần", (double)c.terms.size(), 3);
+        near("γf·ψ2 của HT = 1,2·0,9", c.terms[1].second, 1.08);
+        near("γf của TT = 1,1", c.terms[0].second, 1.1);
+    }
+    generateCombos(m);
+    check(m.combos.size() == 6, "sinh lại không nhân đôi", (double)m.combos.size(), 6);
+    std::string txt = modelToText(m), err;
+    Model m2;
+    check(modelFromText(txt, m2, err) && m2.combos.size() == 6 && m2.combos[1].generated && m2.cases[2].group == 1 &&
+              m2.cases[1].gammaF == 1.2,
+          "ghi/đọc phân loại tải và tổ hợp tự sinh", 0, 0);
+}
+
 int main() {
+    testEigenSolver();
+    testBuckling();
+    testVibration();
+    testComboGenerator();
     testInfluenceLines();
     testEnvelope();
     testEdgeLoad();

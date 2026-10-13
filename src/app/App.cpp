@@ -363,6 +363,7 @@ void App::frame() {
     if (showFrameGen) frameGenDialog();
     if (showTrussGen) trussGenDialog();
     if (showAbout) aboutDialog();
+    if (showEigenDialog) eigenDialog();
     if (showDemo) ImGui::ShowDemoWindow(&showDemo);
     savePrompt();
     clampIndices();
@@ -441,6 +442,8 @@ void App::mainMenu() {
             if (result.ok) addLog("Tính xong: " + std::to_string(result.numEquations) + " phương trình");
         }
         ImGui::MenuItem("Tự động tính khi thay đổi", nullptr, &autoAnalyze);
+        ImGui::Separator();
+        if (ImGui::MenuItem("Ổn định & dao động riêng...")) showEigenDialog = true;
         ImGui::EndMenu();
     }
     if (ImGui::BeginMenu("Xem")) {
@@ -590,5 +593,24 @@ void App::updateInfluence() {
     ilDirty = false;
     ilVersion = modelVersion;
     il = influenceLine(model, effectiveIlPath(), ilTarget, 20);
+}
+
+void App::runEigen() {
+    eig = eigenAnalysis(model, eigOpt);
+    eigVersion = modelVersion;
+    eigMode = 0;
+    if (!eig.ok) {
+        addLog("Lỗi trị riêng: " + eig.error);
+        return;
+    }
+    view = ResultView::Mode;
+    char b[160];
+    if (eig.kind == EigenKind::Buckling)
+        std::snprintf(b, sizeof b, "Ổn định: λcr,1 = %.4g (%d phương trình, %.0f ms)", eig.modes[0].lambda, eig.numEquations,
+                      eig.timeMs);
+    else
+        std::snprintf(b, sizeof b, "Dao động: f1 = %.4g Hz, T1 = %.4g s (%d phương trình, %.0f ms)", eig.modes[0].freq,
+                      eig.modes[0].period, eig.numEquations, eig.timeMs);
+    addLog(b);
 }
 

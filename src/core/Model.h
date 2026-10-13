@@ -96,6 +96,9 @@ struct LoadCase {
     LoadCase(std::string n, double sw = 0) : name(std::move(n)), selfWeight(sw) {}
     std::string name = "TH1";
     double selfWeight = 0; // hệ số trọng lượng bản thân (0 = không xét)
+    int kind = 0;          // 0: tải thường xuyên (tĩnh tải), 1: tải tạm thời (hoạt tải, gió...)
+    int group = 0;         // nhóm loại trừ: các tải tạm thời cùng nhóm ≠ 0 không xuất hiện đồng thời (gió trái/phải)
+    double gammaF = 1.0;   // hệ số độ tin cậy dùng khi tự sinh tổ hợp
     std::vector<NodalLoad> nodal;
     std::vector<ElemLoad> elem;
     std::vector<PrescribedDisp> disp; // chuyển vị cưỡng bức của gối
@@ -106,6 +109,7 @@ struct Combo {
     Combo(std::string n, std::vector<std::pair<int, double>> t) : name(std::move(n)), terms(std::move(t)) {}
     std::string name = "THop1";
     std::vector<std::pair<int, double>> terms; // (chỉ số trường hợp tải, hệ số)
+    bool generated = false;                    // được sinh tự động (sẽ bị thay khi sinh lại)
 };
 
 struct Model {
@@ -137,6 +141,12 @@ struct Model {
     bool hasBars() const;
     void bounds(double& x0, double& y0, double& x1, double& y1) const;
 };
+
+// Sinh tổ hợp tải trọng theo TCVN 2737:1995 (thay các tổ hợp tự sinh trước đó):
+//   Tổ hợp cơ bản 1: Σ tải thường xuyên + 1 tải tạm thời (ψ1 = 1,0);
+//   Tổ hợp cơ bản 2: Σ tải thường xuyên + ψ2·Σ (≥ 2 tải tạm thời), ψ2 = 0,9; mỗi nhóm loại trừ tối đa một tải.
+// Hệ số của mỗi trường hợp tải nhân thêm γf. Trả về số tổ hợp đã sinh.
+int generateCombos(Model& m, double psi1 = 1.0, double psi2 = 0.9, int maxCombos = 300, std::string* note = nullptr);
 
 const char* elemTypeName(ElemType t);
 const char* loadKindName(ElemLoadKind k);

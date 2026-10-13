@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <bitset>
+#include <cstdio>
 
 namespace fem {
 
@@ -162,6 +164,89 @@ void Model::bounds(double& x0, double& y0, double& x1, double& y1) const {
         x1 = std::max(x1, n.x);
         y1 = std::max(y1, n.y);
     }
+}
+
+int generateCombos(Model& m, double psi1, double psi2, int maxCombos, std::string* note) {
+    m.combos.erase(std::remove_if(m.combos.begin(), m.combos.end(), [](const Combo& c) { return c.generated; }),
+                   m.combos.end());
+    std::vector<int> perm, var;
+    for (size_t i = 0; i < m.cases.size(); ++i) (m.cases[i].kind == 0 ? perm : var).push_back((int)i);
+    auto fmtF = [](double v) {
+        char b[32];
+        std::snprintf(b, sizeof b, "%g", v);
+        std::string s = b;
+        for (char& c : s)
+            if (c == '.') c = ',';
+        return s;
+    };
+    std::string permName;
+    for (int i : perm) permName += (permName.empty() ? "" : " + ") + m.cases[i].name;
+    auto make = [&](const std::vector<int>& vs, double psi, const std::string& prefix) {
+        Combo c;
+        c.generated = true;
+        for (int i : perm) c.terms.push_back({i, m.cases[i].gammaF});
+        std::string vn;
+        for (int i : vs) {
+            c.terms.push_back({i, psi * m.cases[i].gammaF});
+            vn += (vn.empty() ? "" : " + ") + m.cases[i].name;
+        }
+        std::string name = prefix + ": " + permName;
+        if (!vs.empty()) {
+            if (!permName.empty()) name += " + ";
+            name += (psi != 1.0 && vs.size() > 1) ? fmtF(psi) + "(" + vn + ")" : (psi != 1.0 ? fmtF(psi) + "·" : "") + vn;
+        }
+        c.name = name;
+        m.combos.push_back(c);
+    };
+    int count = 0;
+    if (var.empty()) {
+        if (!perm.empty()) {
+            make({}, 1.0, "CB");
+            ++count;
+        }
+        return count;
+    }
+    for (int i : var) {
+        make({i}, psi1, "CB1");
+        ++count;
+    }
+    const int nv = (int)var.size();
+    if (nv > 16) {
+        if (note) *note = "Quá nhiều tải tạm thời (> 16): chỉ sinh tổ hợp cơ bản 1.";
+        return count;
+    }
+    std::vector<unsigned> masks;
+    for (unsigned mask = 0; mask < (1u << nv); ++mask) {
+        int pc = 0;
+        bool ok = true;
+        std::vector<int> groups;
+        for (int k = 0; k < nv; ++k)
+            if (mask & (1u << k)) {
+                ++pc;
+                const int g = m.cases[var[k]].group;
+                if (g != 0) {
+                    if (std::find(groups.begin(), groups.end(), g) != groups.end()) ok = false;
+                    groups.push_back(g);
+                }
+            }
+        if (ok && pc >= 2) masks.push_back(mask);
+    }
+    std::stable_sort(masks.begin(), masks.end(),
+                     [](unsigned a, unsigned b) { return std::bitset<32>(a).count() < std::bitset<32>(b).count(); });
+    bool truncated = false;
+    for (unsigned mask : masks) {
+        if (count >= maxCombos) {
+            truncated = true;
+            break;
+        }
+        std::vector<int> vs;
+        for (int k = 0; k < nv; ++k)
+            if (mask & (1u << k)) vs.push_back(var[k]);
+        make(vs, psi2, "CB2");
+        ++count;
+    }
+    if (truncated && note) *note = "Số tổ hợp vượt giới hạn " + std::to_string(maxCombos) + " — đã cắt bớt.";
+    return count;
 }
 
 const char* elemTypeName(ElemType t) {

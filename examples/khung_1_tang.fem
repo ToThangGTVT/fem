@@ -24,13 +24,13 @@ FRAME 4 3 1 1 0 0 0
 SUPPORT 1 1 1 1 0 0 0
 SUPPORT 4 1 1 1 0 0 0
 
-# LOADCASE tên hệ_số_TLBT
+# LOADCASE tên hệ_số_TLBT loại(0 thường xuyên, 1 tạm thời) nhóm_loại_trừ γf
 #   NLOAD nút Fx Fy Mz
 #   ELOAD pt DIST hướng q1 q2 chiếu | POINT hướng P a | MOMENT M a | TEMP t Δt
 #   DISP nút UX|UY|RZ giá_trị   (hướng: LX LY GX GY)
-LOADCASE "Tĩnh tải" 0
+LOADCASE "Tĩnh tải" 0 0 0 1
   ELOAD 2 DIST GY -15 -15 0
-LOADCASE "Gió trái" 0
+LOADCASE "Gió trái" 0 1 0 1
   NLOAD 2 10 0 0
   ELOAD 1 DIST GX 2.4 2.4 0
 

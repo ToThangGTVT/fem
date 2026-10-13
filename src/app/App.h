@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "core/Analysis.h"
+#include "core/Eigen.h"
 #include "core/Model.h"
 #include "core/PostProcess.h"
 #include "imgui.h"
@@ -13,7 +14,7 @@
 struct SDL_Window;
 
 enum class Tool { Select, AddNode, AddFrame, AddTruss };
-enum class ResultView { None, Deformed, N, Q, M, Sigma, Contour, Influence };
+enum class ResultView { None, Deformed, N, Q, M, Sigma, Contour, Influence, Mode };
 enum class Pending { None, New, Open, OpenPath, Example, Quit };
 enum class ContourField { Ux, Uy, Umag, Sx, Sy, Txy, S1, S2, VonMises };
 
@@ -92,6 +93,13 @@ struct App {
     int ilVersion = -1;
     bool ilDirty = true;
 
+    // ---- ổn định & dao động riêng
+    fem::EigenOptions eigOpt;
+    fem::EigenResult eig;
+    int eigVersion = -1, eigMode = 0;
+    bool animateMode = true;
+    bool showEigenDialog = false;
+
     // ---- hỏi lưu thay đổi
     Pending pending = Pending::None;
     int pendingExample = -1;
@@ -149,6 +157,8 @@ struct App {
     void frameGenDialog();
     void trussGenDialog();
     void aboutDialog();
+    void eigenDialog();
+    void runEigen();
     void viewport();
     void shortcuts();
 };

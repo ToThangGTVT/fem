@@ -331,12 +331,12 @@ SUPPORT 7 1 1 0 0 0 0
 SUPPORT 8 1 1 0 0 0 0
 SUPPORT 9 1 1 0 0 0 0
 
-# LOADCASE tên hệ_số_TLBT
+# LOADCASE tên hệ_số_TLBT loại(0 thường xuyên, 1 tạm thời) nhóm_loại_trừ γf
 #   NLOAD nút Fx Fy Mz
 #   ELOAD pt DIST hướng q1 q2 chiếu | POINT hướng P a | MOMENT M a | TEMP t Δt
 #   DISP nút UX|UY|RZ giá_trị   (hướng: LX LY GX GY)
-LOADCASE "Trọng lượng bản thân" 1
-LOADCASE "Áp lực nước thượng lưu" 0
+LOADCASE "Trọng lượng bản thân" 1 0 0 1
+LOADCASE "Áp lực nước thượng lưu" 0 0 0 1
   NLOAD 1 53.3333333333 0 0
   NLOAD 10 51.6666666667 0 0
   NLOAD 10 48.3333333333 0 0

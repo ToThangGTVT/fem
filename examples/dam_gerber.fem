@@ -29,11 +29,11 @@ SUPPORT 2 0 1 0 0 0 0
 SUPPORT 4 0 1 0 0 0 0
 SUPPORT 6 0 1 0 0 0 0
 
-# LOADCASE tên hệ_số_TLBT
+# LOADCASE tên hệ_số_TLBT loại(0 thường xuyên, 1 tạm thời) nhóm_loại_trừ γf
 #   NLOAD nút Fx Fy Mz
 #   ELOAD pt DIST hướng q1 q2 chiếu | POINT hướng P a | MOMENT M a | TEMP t Δt
 #   DISP nút UX|UY|RZ giá_trị   (hướng: LX LY GX GY)
-LOADCASE "Tải trọng" 0
+LOADCASE "Tải trọng" 0 0 0 1
   ELOAD 1 DIST GY -10 -10 0
   ELOAD 2 DIST GY -10 -10 0
   ELOAD 3 DIST GY -10 -10 0

@@ -23,11 +23,11 @@ FRAME 4 3 1 1 0 0 0
 SUPPORT 1 1 1 1 0 0 0
 SUPPORT 4 1 1 0 0 0 0
 
-# LOADCASE tên hệ_số_TLBT
+# LOADCASE tên hệ_số_TLBT loại(0 thường xuyên, 1 tạm thời) nhóm_loại_trừ γf
 #   NLOAD nút Fx Fy Mz
 #   ELOAD pt DIST hướng q1 q2 chiếu | POINT hướng P a | MOMENT M a | TEMP t Δt
 #   DISP nút UX|UY|RZ giá_trị   (hướng: LX LY GX GY)
-LOADCASE "Lún gối phải 2 cm" 0
+LOADCASE "Lún gối phải 2 cm" 0 0 0 1
   DISP 4 UY -0.02
-LOADCASE "Nhiệt độ dầm: t = +20°C, Δt = 15°C" 0
+LOADCASE "Nhiệt độ dầm: t = +20°C, Δt = 15°C" 0 0 0 1
   ELOAD 2 TEMP 20 15

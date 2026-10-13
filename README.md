@@ -43,6 +43,15 @@ chính xác trong nhịp), phổ màu ux, uy, |u|, σx, σy, τxy, σ1, σ2, σ 
 phản lực gối, nội lực N/Q/M tại tiết diện bất kỳ (có bước nhảy đúng tại tiết diện), chuyển vị nút; kèm tung độ
 max/min và diện tích Ω⁺, Ω⁻ để tính S = q·Ω, S = P·y.
 
+**Ổn định** (phương pháp chuyển vị với ma trận độ cứng hình học): hệ số tải trọng tới hạn λcr, các dạng mất
+ổn định, lực tới hạn Ncr và hệ số chiều dài tính toán μ (l0 = μ·l) của từng thanh chịu nén.
+
+**Dao động riêng**: tần số ω, f, chu kỳ T và dạng dao động (có hoạt họa); khối lượng từ trọng lượng bản thân
+và/hoặc quy từ tải trọng thẳng đứng của một bộ tải (m = |Fy|/g).
+
+**Tổ hợp tải trọng tự động theo TCVN 2737:1995**: phân loại tải thường xuyên/tạm thời, nhóm loại trừ
+(gió trái/phải, các sơ đồ chất hoạt tải), hệ số độ tin cậy γf; sinh tổ hợp cơ bản 1 (ψ = 1) và cơ bản 2 (ψ = 0,9).
+
 **Tải trên cạnh phần tử phẳng**: lực phân bố qx, qy hoặc áp lực pháp tuyến biến đổi tuyến tính p = p0 + k·y
 (ví dụ áp lực thủy tĩnh), quy về lực nút tương đương.
 
@@ -93,6 +102,7 @@ src/core/   lõi tính toán, không phụ thuộc giao diện
   Skyline       ma trận skyline + phân tích LDLᵀ (COLSOL)
   Analysis      lắp ghép, đánh số lại RCM, điều kiện biên, giải, hậu xử lý, phát hiện hệ biến hình
   PostProcess   biểu đồ bao, đường ảnh hưởng
+  Eigen         ổn định, dao động riêng (Householder + QL cho ma trận đối xứng)
   Mesher        tạo lưới, chia thanh
   Library       vật liệu, thép hình
   ModelIO       đọc/ghi .fem, báo cáo
@@ -111,3 +121,5 @@ Chế độ dành cho phát triển: `fem2d --shot ảnh.bmp <số ví dụ> <ch
 - Смирнов А.Ф. и др. — Строительная механика. Стержневые системы.
 - Варвак П.М. и др. — Метод конечных элементов; Zienkiewicz, Taylor — The Finite Element Method.
 - Жемочкин Б.Н. — Расчёт балок на упругом основании.
+- Смирнов А.Ф. — Устойчивость и колебания сооружений; СП 16.13330 (chiều dài tính toán cột khung).
+- TCVN 2737:1995 — Tải trọng và tác động.

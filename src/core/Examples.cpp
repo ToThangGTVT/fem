@@ -105,6 +105,10 @@ Model continuousBeam() {
     h3.elem = {dist(e[0], p, p), dist(e[1], p, p)};
     LoadCase h4{"Hoạt tải nhịp 2 + 3"};
     h4.elem = {dist(e[1], p, p), dist(e[2], p, p)};
+    for (LoadCase* h : {&h1, &h2, &h3, &h4}) {
+        h->kind = 1;
+        h->group = 1; // các sơ đồ chất hoạt tải không xảy ra đồng thời
+    }
     m.cases = {tt, h1, h2, h3, h4};
     for (int i = 1; i <= 4; ++i) m.combos.push_back({"1,1TT + 1,2·" + m.cases[i].name, {{0, 1.1}, {i, 1.2}}});
     return m;
@@ -125,6 +129,7 @@ Model portalFrame() {
     LoadCase tt{"Tĩnh tải"};
     tt.elem.push_back(dist(beam, -15, -15));
     LoadCase gio{"Gió trái"};
+    gio.kind = 1;
     gio.nodal.push_back({b, {10, 0, 0}});
     gio.elem.push_back(dist(0, 2.4, 2.4, LoadDir::GlobalX));
     m.cases = {tt, gio};
@@ -174,7 +179,9 @@ Model twoStoreyFrame() {
     for (int b : beams) tt.elem.push_back(dist(b, -18, -18));
     LoadCase ht{"Hoạt tải"};
     for (int b : beams) ht.elem.push_back(dist(b, -9, -9));
+    ht.kind = 1;
     LoadCase gio{"Gió X"};
+    gio.kind = 1;
     gio.nodal.push_back({n[1][0], {12, 0, 0}});
     gio.nodal.push_back({n[2][0], {7, 0, 0}});
     m.cases = {tt, ht, gio};

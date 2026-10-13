@@ -108,10 +108,11 @@ std::string modelToText(const Model& m) {
     for (const auto& s : m.supports)
         o << "SUPPORT " << s.node + 1 << " " << (int)s.fix[0] << " " << (int)s.fix[1] << " " << (int)s.fix[2] << " "
           << num(s.k[0]) << " " << num(s.k[1]) << " " << num(s.k[2]) << "\n";
-    o << "\n# LOADCASE tên hệ_số_TLBT\n#   NLOAD nút Fx Fy Mz\n#   ELOAD pt DIST hướng q1 q2 chiếu | POINT hướng P a | MOMENT M a | TEMP t Δt\n"
+    o << "\n# LOADCASE tên hệ_số_TLBT loại(0 thường xuyên, 1 tạm thời) nhóm_loại_trừ γf\n#   NLOAD nút Fx Fy Mz\n#   ELOAD pt DIST hướng q1 q2 chiếu | POINT hướng P a | MOMENT M a | TEMP t Δt\n"
          "#   DISP nút UX|UY|RZ giá_trị   (hướng: LX LY GX GY)\n";
     for (const auto& lc : m.cases) {
-        o << "LOADCASE " << quote(lc.name) << " " << num(lc.selfWeight) << "\n";
+        o << "LOADCASE " << quote(lc.name) << " " << num(lc.selfWeight) << " " << lc.kind << " " << lc.group << " "
+          << num(lc.gammaF) << "\n";
         for (const auto& l : lc.nodal)
             o << "  NLOAD " << l.node + 1 << " " << num(l.F[0]) << " " << num(l.F[1]) << " " << num(l.F[2]) << "\n";
         for (const auto& l : lc.elem) {
@@ -131,7 +132,7 @@ std::string modelToText(const Model& m) {
     }
     if (!m.combos.empty()) o << "\n# COMBO tên trường_hợp hệ_số ...\n";
     for (const auto& c : m.combos) {
-        o << "COMBO " << quote(c.name);
+        o << "COMBO " << quote(c.name) << (c.generated ? " AUTO" : "");
         for (const auto& t : c.terms) o << " " << t.first + 1 << " " << num(t.second);
         o << "\n";
     }
@@ -221,6 +222,9 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
             LoadCase lc;
             lc.name = t.size() > 1 ? t[1] : "TH" + std::to_string(m.cases.size() + 1);
             lc.selfWeight = d(2);
+            lc.kind = (int)d(3, 0);
+            lc.group = (int)d(4, 0);
+            lc.gammaF = d(5, 1.0);
             m.cases.push_back(lc);
             cur = &m.cases.back();
         } else if (k == "NLOAD" || k == "ELOAD" || k == "DISP") {
@@ -265,7 +269,12 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
         } else if (k == "COMBO") {
             Combo c;
             c.name = t.size() > 1 ? t[1] : "THop";
-            for (size_t i = 2; i + 1 < t.size(); i += 2) c.terms.push_back({idx(i), d(i + 1)});
+            size_t i0 = 2;
+            if (t.size() > 2 && t[2] == "AUTO") {
+                c.generated = true;
+                i0 = 3;
+            }
+            for (size_t i = i0; i + 1 < t.size(); i += 2) c.terms.push_back({idx(i), d(i + 1)});
             m.combos.push_back(c);
         } else {
             return fail("từ khóa không hợp lệ: " + k);

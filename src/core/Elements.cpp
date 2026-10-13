@@ -408,6 +408,104 @@ void barRecover(const BarProps& p, const BarLoads& l, const Vec6& uGlobal, int s
     }
 }
 
+void barEigenMatrices(const BarProps& p, double N, double rhoA, Mat6& Kg, Mat6& KGg, Mat6& Mg) {
+    const double L = p.L;
+    Mat6 K{}, KG{}, M{};
+    barLocalStiffness(p, K);
+    for (auto& r : KG) r.fill(0.0);
+    for (auto& r : M) r.fill(0.0);
+    if (p.truss) {
+        // thanh dàn: chỉ độ cứng dọc trục, độ cứng hình học kiểu dây căng N/L, khối lượng tuyến tính đẳng hướng
+        const double ka = p.EA / L;
+        for (auto& r : K) r.fill(0.0);
+        K[0][0] = K[3][3] = ka;
+        K[0][3] = K[3][0] = -ka;
+        const double g = N / L;
+        KG[1][1] = KG[4][4] = g;
+        KG[1][4] = KG[4][1] = -g;
+        const double m = rhoA * L / 6;
+        for (int d = 0; d < 2; ++d) {
+            M[d][d] = M[3 + d][3 + d] = 2 * m;
+            M[d][3 + d] = M[3 + d][d] = m;
+        }
+    } else {
+        const double g = N / (30 * L);
+        const int idx[4] = {1, 2, 4, 5};
+        const double kg[4][4] = {{36, 3 * L, -36, 3 * L},
+                                 {3 * L, 4 * L * L, -3 * L, -L * L},
+                                 {-36, -3 * L, 36, -3 * L},
+                                 {3 * L, -L * L, -3 * L, 4 * L * L}};
+        const double m = rhoA * L / 420;
+        const double mb[4][4] = {{156, 22 * L, 54, -13 * L},
+                                 {22 * L, 4 * L * L, 13 * L, -3 * L * L},
+                                 {54, 13 * L, 156, -22 * L},
+                                 {-13 * L, -3 * L * L, -22 * L, 4 * L * L}};
+        for (int i = 0; i < 4; ++i)
+            for (int j = 0; j < 4; ++j) {
+                KG[idx[i]][idx[j]] = g * kg[i][j];
+                M[idx[i]][idx[j]] = m * mb[i][j];
+            }
+        M[0][0] = M[3][3] = rhoA * L / 3;
+        M[0][3] = M[3][0] = rhoA * L / 6;
+        // khớp: u = Tr·u_c với góc xoay đầu khớp φ_r = −Krr⁻¹ Krc u_c (trùng với khử tĩnh cho K)
+        const std::vector<int> R = released(p);
+        if (!R.empty()) {
+            const int n = (int)R.size();
+            const std::vector<double> Kinv = releasedInverse(K, R);
+            Mat6 Tr{};
+            for (auto& r : Tr) r.fill(0.0);
+            for (int i = 0; i < 6; ++i)
+                if (!isReleased(R, i)) Tr[i][i] = 1.0;
+            for (int a = 0; a < n; ++a)
+                for (int c = 0; c < 6; ++c) {
+                    if (isReleased(R, c)) continue;
+                    double v = 0;
+                    for (int b = 0; b < n; ++b) v -= Kinv[a * n + b] * K[R[b]][c];
+                    Tr[R[a]][c] = v;
+                }
+            auto congruent = [&](Mat6& A) {
+                Mat6 AT{}, out{};
+                for (int i = 0; i < 6; ++i)
+                    for (int j = 0; j < 6; ++j) {
+                        double v = 0;
+                        for (int k = 0; k < 6; ++k) v += A[i][k] * Tr[k][j];
+                        AT[i][j] = v;
+                    }
+                for (int i = 0; i < 6; ++i)
+                    for (int j = 0; j < 6; ++j) {
+                        double v = 0;
+                        for (int k = 0; k < 6; ++k) v += Tr[k][i] * AT[k][j];
+                        out[i][j] = v;
+                    }
+                A = out;
+            };
+            congruent(K);
+            congruent(KG);
+            congruent(M);
+        }
+    }
+    // sang hệ tổng thể: A_g = Tᵀ A T
+    auto toGlobal = [&](const Mat6& A, Mat6& G) {
+        Mat6 AT;
+        for (int i = 0; i < 6; ++i)
+            for (int blk = 0; blk < 2; ++blk) {
+                const double a = A[i][3 * blk], b = A[i][3 * blk + 1];
+                AT[i][3 * blk] = a * p.c - b * p.s;
+                AT[i][3 * blk + 1] = a * p.s + b * p.c;
+                AT[i][3 * blk + 2] = A[i][3 * blk + 2];
+            }
+        for (int j = 0; j < 6; ++j) {
+            Vec6 col, out;
+            for (int i = 0; i < 6; ++i) col[i] = AT[i][j];
+            rotate(p, col, out, false);
+            for (int i = 0; i < 6; ++i) G[i][j] = out[i];
+        }
+    };
+    toGlobal(K, Kg);
+    toGlobal(KG, KGg);
+    toGlobal(M, Mg);
+}
+
 void barFoundationForce(const BarProps& p, const BarResult& r, double& Fx, double& Fy) {
     Fx = Fy = 0;
     if (p.kf <= 0) return;

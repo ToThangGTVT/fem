@@ -96,10 +96,10 @@ FRAME 40 41 1 1 0 0 20000
 # SUPPORT nút khóa_x khóa_y khóa_φ kx ky kφ
 SUPPORT 21 1 0 0 0 0 0
 
-# LOADCASE tên hệ_số_TLBT
+# LOADCASE tên hệ_số_TLBT loại(0 thường xuyên, 1 tạm thời) nhóm_loại_trừ γf
 #   NLOAD nút Fx Fy Mz
 #   ELOAD pt DIST hướng q1 q2 chiếu | POINT hướng P a | MOMENT M a | TEMP t Δt
 #   DISP nút UX|UY|RZ giá_trị   (hướng: LX LY GX GY)
-LOADCASE "Tải tập trung" 0
+LOADCASE "Tải tập trung" 0 0 0 1
   NLOAD 21 0 -400 0
   NLOAD 6 0 -150 0

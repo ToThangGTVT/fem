@@ -189,9 +189,13 @@ void App::viewport() {
                       {"M", ResultView::M, "Biểu đồ mômen (vẽ về phía thớ căng)"},
                       {"σ", ResultView::Sigma, "Ứng suất pháp lớn nhất ở thớ biên: N/A ± M/W"},
                       {"Màu", ResultView::Contour, "Phổ màu ứng suất / chuyển vị (phần tử phẳng)"},
-                      {"Đah", ResultView::Influence, "Đường ảnh hưởng (thiết lập trong panel Kết quả)"}};
+                      {"Đah", ResultView::Influence, "Đường ảnh hưởng (thiết lập trong panel Kết quả)"},
+                      {"Dạng riêng", ResultView::Mode, "Dạng mất ổn định / dạng dao động riêng (Tính toán → Ổn định & dao động)"}};
     for (const auto& b : vbs)
-        if (toolButton(b.t, view == b.v, b.tip)) view = b.v;
+        if (toolButton(b.t, view == b.v, b.tip)) {
+            view = b.v;
+            if (view == ResultView::Mode && !(eig.ok && eigVersion == modelVersion)) showEigenDialog = true;
+        }
     if (toolButton("Vừa khung", false, "Phóng vừa toàn bộ kết cấu (phím F)")) fitRequested = true;
 
     // ---------------------------------------------------------------- canvas
@@ -640,6 +644,47 @@ void App::viewport() {
         }
     }
 
+    // ---- dạng riêng (ổn định / dao động)
+    if (view == ResultView::Mode) {
+        const bool fresh = eig.ok && eigVersion == modelVersion && eigMode >= 0 && eigMode < (int)eig.modes.size();
+        if (fresh) {
+            const EigenMode& md = eig.modes[eigMode];
+            const Model& sm = eig.sub;
+            double amp = 0.1 * modelSize * deformFactor;
+            if (animateMode) amp *= std::sin(ImGui::GetTime() * 2 * kPi * 0.6);
+            auto pos = [&](int n) {
+                return cam.toScreen(sm.nodes[n].x + md.U[3 * n] * amp, sm.nodes[n].y + md.U[3 * n + 1] * amp);
+            };
+            for (size_t e = 0; e < m.elements.size(); ++e) {
+                const Element& el = m.elements[e];
+                if (el.isBar()) {
+                    if (e >= eig.barChain.size()) continue;
+                    std::vector<ImVec2> pts;
+                    for (int n : eig.barChain[e]) pts.push_back(pos(n));
+                    dl->AddPolyline(pts.data(), (int)pts.size(), P.deformed, 2.2f);
+                } else {
+                    ImVec2 pts[4];
+                    for (int k = 0; k < el.nodeCount(); ++k) pts[k] = pos(el.n[k]);
+                    dl->AddPolyline(pts, el.nodeCount(), P.deformed, 1.2f, ImDrawFlags_Closed);
+                }
+            }
+            char b[200];
+            if (eig.kind == EigenKind::Buckling)
+                std::snprintf(b, sizeof b, "Dạng mất ổn định %d:  λcr = %.4g  (tải trọng tới hạn = λcr × bộ tải \"%s\")",
+                              eigMode + 1, md.lambda,
+                              eigOpt.loadSet < (int)result.sets.size() ? result.sets[eigOpt.loadSet].name.c_str() : "");
+            else
+                std::snprintf(b, sizeof b, "Dạng dao động %d:  ω = %.4g rad/s,  f = %.4g Hz,  T = %.4g s", eigMode + 1,
+                              md.omega, md.freq, md.period);
+            label(dl, ImVec2(cam.c0.x + 10, cam.c0.y + 30), b, P.text, ImVec2(0, 0.5f));
+        } else {
+            label(dl, ImVec2(cam.c0.x + 10, cam.c0.y + 30),
+                  eig.ok || eigVersion < 0 ? "Chưa có kết quả trị riêng — mở Tính toán → Ổn định & dao động riêng"
+                                           : "Lỗi trị riêng: " + eig.error,
+                  IM_COL32(200, 120, 0, 255), ImVec2(0, 0.5f));
+        }
+    }
+
     // ---- gối tựa
     auto connectedDir = [&](int node) {
         ImVec2 d(0, 0);
@@ -720,7 +765,7 @@ void App::viewport() {
 
     // ---- tải trọng của trường hợp đang soạn
     if (showLoads && activeCase < (int)m.cases.size() && !(showRes && view == ResultView::Contour) &&
-        view != ResultView::Influence && !envMode) {
+        view != ResultView::Influence && view != ResultView::Mode && !envMode) {
         const LoadCase& lc = m.cases[activeCase];
         const bool faint = showRes && view != ResultView::Deformed;
         const ImU32 c = faint ? withAlpha(P.load, 80) : P.load;
@@ -823,7 +868,7 @@ void App::viewport() {
     }
 
     // ---- phản lực
-    if (showRes && showReactions && view != ResultView::Contour && view != ResultView::Influence && !envMode) {
+    if (showRes && showReactions && view != ResultView::Contour && view != ResultView::Influence && view != ResultView::Mode && !envMode) {
         const ImU32 c = P.reaction;
         for (size_t i = 0; i < m.nodes.size(); ++i) {
             const ImVec2 p = nodePos((int)i, false);

@@ -22,6 +22,7 @@ add_library(femcore STATIC
   src/core/ModelIO.cpp
   src/core/Examples.cpp
   src/core/PostProcess.cpp
+  src/core/Eigen.cpp
 )
 target_include_directories(femcore PUBLIC src)
 if(MSVC)

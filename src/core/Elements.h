@@ -56,6 +56,10 @@ void barGlobal(const BarProps& p, const BarLoads& l, Mat6& Kg, Vec6& fg);
 // Tính nội lực, chuyển vị dọc thanh từ chuyển vị nút tổng thể.
 void barRecover(const BarProps& p, const BarLoads& l, const Vec6& uGlobal, int samples, BarResult& out);
 
+// Ma trận dùng cho bài toán trị riêng (hệ tổng thể, đã kể khớp đầu thanh bằng phép biến đổi khử tĩnh):
+//   K  — độ cứng; KG — độ cứng hình học ứng với lực dọc N (N > 0 kéo); M — khối lượng tương thích, ρA (t/m).
+void barEigenMatrices(const BarProps& p, double N, double rhoA, Mat6& K, Mat6& KG, Mat6& M);
+
 // Hợp lực phản lực nền Winkler tác dụng lên thanh, hệ tổng thể (Fx, Fy).
 void barFoundationForce(const BarProps& p, const BarResult& r, double& Fx, double& Fy);
 

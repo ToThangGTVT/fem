@@ -532,6 +532,27 @@ void App::modelPanel() {
             ImGui::SetNextItemWidth(80);
             editD(*this, "Hệ số trọng lượng bản thân", lc.selfWeight, "%.3g");
             help("0 = không xét. 1 = kể trọng lượng bản thân (γ·A cho thanh, γ·t cho phần tử phẳng).");
+            {
+                const char* kinds[] = {"Thường xuyên (tĩnh tải)", "Tạm thời (hoạt tải, gió...)"};
+                int out;
+                ImGui::SetNextItemWidth(200);
+                if (editEnum(*this, "Loại tải", lc.kind, kinds, 2, out)) {
+                    lc.kind = out;
+                    changed();
+                }
+                if (lc.kind == 1) {
+                    ImGui::SetNextItemWidth(80);
+                    if (ImGui::InputInt("Nhóm loại trừ", &lc.group)) {
+                        lc.group = std::max(0, lc.group);
+                        dirty = true;
+                    }
+                    trackEdit();
+                    help("Các tải tạm thời cùng nhóm (≠ 0) không tác dụng đồng thời, ví dụ gió trái và gió phải cùng nhóm 1.");
+                }
+                ImGui::SetNextItemWidth(80);
+                editD(*this, "Hệ số độ tin cậy γf", lc.gammaF, "%.3g");
+                help("Dùng khi tự sinh tổ hợp. Đặt 1 nếu giá trị tải đã nhập là tải tính toán.");
+            }
 
             ImGui::SeparatorText("Tải nút (kN, kNm)");
             int delN = -1, delE = -1, delD = -1;
@@ -651,6 +672,27 @@ void App::modelPanel() {
                 changed();
             }
             help("Tổ hợp tuyến tính các trường hợp tải với hệ số (ví dụ hệ số độ tin cậy, hệ số tổ hợp theo TCVN 2737).");
+            {
+                static double psi1 = 1.0, psi2 = 0.9;
+                ImGui::SeparatorText("Sinh tự động theo TCVN 2737:1995");
+                ImGui::SetNextItemWidth(60);
+                ImGui::InputDouble("ψ1", &psi1, 0, 0, "%.2f");
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(60);
+                ImGui::InputDouble("ψ2", &psi2, 0, 0, "%.2f");
+                ImGui::SameLine();
+                if (ImGui::Button("Sinh tổ hợp")) {
+                    snapshot();
+                    std::string note;
+                    const int n = generateCombos(m, psi1, psi2, 300, &note);
+                    addLog("Đã sinh " + std::to_string(n) + " tổ hợp (cơ bản 1 và 2)." + (note.empty() ? "" : " " + note));
+                    changed();
+                }
+                help("Cơ bản 1: tải thường xuyên + một tải tạm thời (ψ1). Cơ bản 2: tải thường xuyên + ψ2 × (từ hai tải "
+                     "tạm thời trở lên, mỗi nhóm loại trừ tối đa một). Mỗi tải nhân hệ số γf của nó. Phân loại tải ở thẻ "
+                     "Tải trọng. Các tổ hợp tự sinh trước đó được thay thế; tổ hợp nhập tay được giữ.");
+                ImGui::Separator();
+            }
             std::vector<std::string> cn;
             for (auto& c : m.cases) cn.push_back(c.name);
             int delC = -1;
@@ -660,6 +702,7 @@ void App::modelPanel() {
                 ImGui::Separator();
                 ImGui::SetNextItemWidth(-60);
                 editS(*this, "##name", c.name);
+                if (c.generated && ImGui::IsItemHovered()) ImGui::SetTooltip("Tổ hợp tự sinh");
                 ImGui::SameLine();
                 if (ImGui::SmallButton("Xóa")) delC = (int)i;
                 int delT = -1;
@@ -1075,13 +1118,16 @@ void App::resultPanel() {
             ImGui::EndCombo();
         }
     }
-    const char* views[] = {"Sơ đồ", "Biến dạng", "N", "Q", "M", "σ thanh", "Phổ màu", "Đường ảnh hưởng"};
+    const char* views[] = {"Sơ đồ", "Biến dạng", "N", "Q", "M", "σ thanh", "Phổ màu", "Đường ảnh hưởng", "Dạng riêng"};
     int v = (int)view;
     const float right = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < 9; ++i) {
         const float w = ImGui::GetFrameHeight() + ImGui::GetStyle().ItemInnerSpacing.x + ImGui::CalcTextSize(views[i]).x;
         if (i && ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x + w < right) ImGui::SameLine();
-        if (ImGui::RadioButton(views[i], v == i)) view = (ResultView)i;
+        if (ImGui::RadioButton(views[i], v == i)) {
+            view = (ResultView)i;
+            if (view == ResultView::Mode && !(eig.ok && eigVersion == modelVersion)) showEigenDialog = true;
+        }
     }
     if (view == ResultView::Contour) {
         const ContourField fields[] = {ContourField::Ux, ContourField::Uy, ContourField::Umag, ContourField::Sx,
@@ -1694,3 +1740,140 @@ void App::aboutDialog() {
     ImGui::BulletText("TCVN 5574:2018 (bê tông), TCVN 5575:2012 (thép), ГОСТ 8239-89, ГОСТ 8240-97.");
     ImGui::End();
 }
+
+// ============================================================================ ổn định & dao động riêng
+void App::eigenDialog() {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - 500, vp->WorkPos.y + 60), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(460, 520), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Ổn định & dao động riêng", &showEigenDialog)) {
+        ImGui::End();
+        return;
+    }
+    const Model& m = model;
+    int kind = (int)eigOpt.kind;
+    ImGui::RadioButton("Ổn định (tải trọng tới hạn)", &kind, 0);
+    ImGui::SameLine();
+    ImGui::RadioButton("Dao động riêng", &kind, 1);
+    eigOpt.kind = (EigenKind)kind;
+    std::vector<std::string> sets;
+    for (auto& c : m.cases) sets.push_back("TH: " + c.name);
+    for (auto& c : m.combos) sets.push_back("THợp: " + c.name);
+    auto setCombo = [&](const char* label, int& v, bool allowNone) {
+        const char* pv = v >= 0 && v < (int)sets.size() ? sets[v].c_str() : "— không —";
+        ImGui::SetNextItemWidth(260);
+        if (ImGui::BeginCombo(label, pv)) {
+            if (allowNone && ImGui::Selectable("— không —", v < 0)) v = -1;
+            for (int i = 0; i < (int)sets.size(); ++i)
+                if (ImGui::Selectable(sets[i].c_str(), i == v)) v = i;
+            ImGui::EndCombo();
+        }
+    };
+    if (eigOpt.kind == EigenKind::Buckling) {
+        setCombo("Bộ tải gây nén", eigOpt.loadSet, false);
+        help("Tính lực dọc N từ bộ tải này, rồi tìm hệ số λcr sao cho λcr × tải làm kết cấu mất ổn định "
+             "(phương pháp chuyển vị, ma trận độ cứng hình học).");
+    } else {
+        ImGui::SetNextItemWidth(100);
+        ImGui::InputDouble("Hệ số khối lượng bản thân", &eigOpt.selfMassFactor, 0, 0, "%.3g");
+        help("Khối lượng phân bố ρA = γA/g của thanh, ρt của phần tử phẳng (γ lấy từ vật liệu).");
+        setCombo("Quy tải thành khối lượng", eigOpt.massSet, true);
+        if (eigOpt.massSet >= 0) {
+            ImGui::SetNextItemWidth(100);
+            ImGui::InputDouble("Hệ số", &eigOpt.massSetFactor, 0, 0, "%.3g");
+        }
+        help("Khối lượng tập trung tại nút m = |Fy|/g từ tải trọng thẳng đứng của bộ tải (ví dụ tĩnh tải + 0,5 hoạt tải).");
+    }
+    ImGui::SetNextItemWidth(100);
+    ImGui::InputInt("Số dạng riêng", &eigOpt.modes);
+    eigOpt.modes = std::clamp(eigOpt.modes, 1, 50);
+    ImGui::SetNextItemWidth(100);
+    ImGui::InputInt("Số đoạn chia mỗi thanh", &eigOpt.subdiv);
+    eigOpt.subdiv = std::clamp(eigOpt.subdiv, 1, 40);
+    if (ImGui::Button("Tính", ImVec2(120, 0))) runEigen();
+    ImGui::SameLine();
+    ImGui::Checkbox("Hoạt họa dạng riêng", &animateMode);
+
+    if (eigVersion >= 0 && eigVersion != modelVersion) {
+        ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(200, 120, 0, 255));
+        ImGui::TextWrapped("Mô hình đã thay đổi sau lần tính trước — hãy tính lại.");
+        ImGui::PopStyleColor();
+    }
+    if (!eig.ok) {
+        if (!eig.error.empty()) {
+            ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(200, 30, 30, 255));
+            ImGui::TextWrapped("%s", eig.error.c_str());
+            ImGui::PopStyleColor();
+        }
+        ImGui::End();
+        return;
+    }
+    for (const auto& w : eig.warnings) ImGui::TextDisabled("⚠ %s", w.c_str());
+    ImGui::Text("%d phương trình, %.0f ms", eig.numEquations, eig.timeMs);
+    const bool buck = eig.kind == EigenKind::Buckling;
+    if (ImGui::BeginTable("modes", buck ? 2 : 4, tableFlags(), ImVec2(0, std::min(200.0f, 30 + 24.0f * eig.modes.size())))) {
+        ImGui::TableSetupScrollFreeze(0, 1);
+        ImGui::TableSetupColumn("Dạng", ImGuiTableColumnFlags_WidthFixed, 50);
+        if (buck) ImGui::TableSetupColumn("λcr (hệ số tải tới hạn)");
+        else {
+            ImGui::TableSetupColumn("ω (rad/s)");
+            ImGui::TableSetupColumn("f (Hz)");
+            ImGui::TableSetupColumn("T (s)");
+        }
+        ImGui::TableHeadersRow();
+        for (int i = 0; i < (int)eig.modes.size(); ++i) {
+            const EigenMode& md = eig.modes[i];
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            if (ImGui::Selectable(std::to_string(i + 1).c_str(), i == eigMode, ImGuiSelectableFlags_SpanAllColumns)) {
+                eigMode = i;
+                view = ResultView::Mode;
+            }
+            ImGui::TableNextColumn();
+            if (buck) ImGui::Text("%.5g", md.lambda);
+            else {
+                ImGui::Text("%.5g", md.omega);
+                ImGui::TableNextColumn();
+                ImGui::Text("%.5g", md.freq);
+                ImGui::TableNextColumn();
+                ImGui::Text("%.5g", md.period);
+            }
+        }
+        ImGui::EndTable();
+    }
+    if (buck && eigVersion == modelVersion) {
+        ImGui::SeparatorText("Thanh chịu nén ở dạng 1");
+        ImGui::TextDisabled("Ncr = λcr·N; chiều dài tính toán l0 = μ·l, μ = (π/l)·√(EI/Ncr)");
+        if (ImGui::BeginTable("mu", 5, tableFlags())) {
+            ImGui::TableSetupScrollFreeze(0, 1);
+            ImGui::TableSetupColumn("Thanh", ImGuiTableColumnFlags_WidthFixed, 44);
+            ImGui::TableSetupColumn("N (kN)");
+            ImGui::TableSetupColumn("Ncr (kN)");
+            ImGui::TableSetupColumn("μ");
+            ImGui::TableSetupColumn("l0 (m)");
+            ImGui::TableHeadersRow();
+            for (size_t e = 0; e < m.elements.size() && e < eig.memberN.size(); ++e) {
+                const double mu = effectiveLengthFactor(m, eig, (int)e);
+                if (mu <= 0) continue;
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                if (ImGui::Selectable(std::to_string(e + 1).c_str(), selElems.count((int)e) > 0,
+                                      ImGuiSelectableFlags_SpanAllColumns)) {
+                    selElems = {(int)e};
+                    selNodes.clear();
+                }
+                ImGui::TableNextColumn();
+                ImGui::Text("%.3f", eig.memberN[e]);
+                ImGui::TableNextColumn();
+                ImGui::Text("%.1f", -eig.memberN[e] * eig.modes[0].lambda);
+                ImGui::TableNextColumn();
+                ImGui::Text("%.3f", mu);
+                ImGui::TableNextColumn();
+                ImGui::Text("%.3f", mu * m.barLength((int)e));
+            }
+            ImGui::EndTable();
+        }
+    }
+    ImGui::End();
+}
+

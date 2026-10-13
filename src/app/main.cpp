@@ -126,6 +126,15 @@ int main(int argc, char** argv) {
             // cờ: e = biểu đồ bao; m<thanh>:<x> = đah M tại tiết diện; q<thanh>:<x> = đah Q
             const std::string f = argv[6];
             app.showEnvelope = f.find('e') != std::string::npos;
+            if (f[0] == 'b' || f[0] == 'v') {
+                app.eigOpt.kind = f[0] == 'b' ? fem::EigenKind::Buckling : fem::EigenKind::Vibration;
+                app.eigMode = 0;
+                app.animateMode = false;
+                app.runEigen();
+                app.animateMode = false;
+                if (f.size() > 1) app.eigMode = std::atoi(f.c_str() + 1) - 1;
+                app.showEigenDialog = true;
+            }
             if (f[0] == 'm' || f[0] == 'q') {
                 app.ilTarget.kind = fem::IlKind::Force;
                 app.ilTarget.qty = f[0] == 'm' ? fem::BarQty::M : fem::BarQty::Q;
