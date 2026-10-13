@@ -26,11 +26,27 @@ struct Material {
     double gamma = 78.5;   // trọng lượng riêng, kN/m³
 };
 
+// Hình dạng tiết diện (để tính đặc trưng hình học, ứng suất tiếp, vẽ). Kích thước theo m.
+enum class ShapeKind { None = 0, Rect, Tee, IBeam, Box, Pipe, Circle, Channel, Angle, Polygon };
+struct SectionShape {
+    ShapeKind kind = ShapeKind::None;
+    // Rect: b, h | Tee: b_cánh, t_cánh, t_sườn, h | IBeam: b_trên, t_trên, t_bụng, h, b_dưới, t_dưới
+    // Box: b, h, t | Pipe: D, t | Circle: D | Channel: b, h, t_bụng, t_cánh | Angle: b, h, t
+    std::array<double, 6> p{0, 0, 0, 0, 0, 0};
+    // Polygon: các chu tuyến (x, y), ngược chiều kim đồng hồ là phần đặc, thuận chiều là lỗ
+    std::vector<std::vector<std::array<double, 2>>> contours;
+};
+
 struct Section {
     std::string name = "Tiết diện";
     double A = 0.01;  // diện tích, m²
-    double I = 1e-5;  // mômen quán tính, m⁴
-    double h = 0.2;   // chiều cao (tính ứng suất thớ biên, tải nhiệt), m
+    double I = 1e-5;  // mômen quán tính với trục trung hòa nằm ngang, m⁴
+    double h = 0.2;   // chiều cao (tải nhiệt), m
+    double yTop = 0;  // khoảng cách trọng tâm → thớ trên (0: lấy h/2)
+    double yBot = 0;  // khoảng cách trọng tâm → thớ dưới (0: lấy h/2)
+    SectionShape shape;
+    double top() const { return yTop > 0 ? yTop : h / 2; }
+    double bot() const { return yBot > 0 ? yBot : h / 2; }
 };
 
 struct Element {

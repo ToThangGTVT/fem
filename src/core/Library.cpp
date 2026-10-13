@@ -1,5 +1,7 @@
 #include "core/Library.h"
 
+#include "core/SectionGeom.h"
+
 #include <cmath>
 #include <cstdio>
 
@@ -79,39 +81,67 @@ Section toSection(const ProfilePreset& p) {
     return s;
 }
 
-Section rectSection(double b, double h) {
-    Section s;
-    char buf[64];
-    std::snprintf(buf, sizeof buf, "CN %gx%g", b * 100, h * 100);
-    s.name = buf;
-    s.A = b * h;
-    s.I = b * h * h * h / 12;
-    s.h = h;
+static std::string dimName(const char* prefix, std::initializer_list<double> v) {
+    std::string s = prefix;
+    bool first = true;
+    for (double x : v) {
+        char b[32];
+        std::snprintf(b, sizeof b, "%s%g", first ? " " : "x", x);
+        s += b;
+        first = false;
+    }
     return s;
+}
+
+Section rectSection(double b, double h) {
+    SectionShape s;
+    s.kind = ShapeKind::Rect;
+    s.p = {b, h, 0, 0, 0, 0};
+    Section r = sectionFromShape(dimName("CN", {b * 100, h * 100}), s);
+    // giá trị chính xác (không phụ thuộc đa giác)
+    r.A = b * h;
+    r.I = b * h * h * h / 12;
+    return r;
 }
 
 Section circleSection(double d) {
-    Section s;
-    char buf[64];
-    std::snprintf(buf, sizeof buf, "Tròn D%g", d * 1000);
-    s.name = buf;
+    SectionShape s;
+    s.kind = ShapeKind::Circle;
+    s.p = {d, 0, 0, 0, 0, 0};
+    Section r = sectionFromShape(dimName("Tròn D", {d * 1000}), s);
     const double pi = 3.14159265358979323846;
-    s.A = pi * d * d / 4;
-    s.I = pi * std::pow(d, 4) / 64;
-    s.h = d;
-    return s;
+    r.A = pi * d * d / 4;
+    r.I = pi * std::pow(d, 4) / 64;
+    r.yTop = r.yBot = d / 2;
+    return r;
 }
 
 Section pipeSection(double D, double t) {
-    Section s;
-    char buf[64];
-    std::snprintf(buf, sizeof buf, "Ống %gx%g", D * 1000, t * 1000);
-    s.name = buf;
+    SectionShape s;
+    s.kind = ShapeKind::Pipe;
+    s.p = {D, t, 0, 0, 0, 0};
+    Section r = sectionFromShape(dimName("Ống", {D * 1000, t * 1000}), s);
     const double pi = 3.14159265358979323846, d = D - 2 * t;
-    s.A = pi * (D * D - d * d) / 4;
-    s.I = pi * (std::pow(D, 4) - std::pow(d, 4)) / 64;
-    s.h = D;
-    return s;
+    r.A = pi * (D * D - d * d) / 4;
+    r.I = pi * (std::pow(D, 4) - std::pow(d, 4)) / 64;
+    r.yTop = r.yBot = D / 2;
+    return r;
+}
+
+Section shapeSection(ShapeKind k, const std::array<double, 6>& p) {
+    SectionShape s;
+    s.kind = k;
+    s.p = p;
+    std::string n;
+    switch (k) {
+    case ShapeKind::Tee: n = dimName("T", {p[0] * 1000, p[1] * 1000, p[2] * 1000, p[3] * 1000}); break;
+    case ShapeKind::IBeam: n = dimName("I", {p[3] * 1000, p[0] * 1000, p[1] * 1000, p[2] * 1000}); break;
+    case ShapeKind::Box: n = dimName("Hộp", {p[0] * 1000, p[1] * 1000, p[2] * 1000}); break;
+    case ShapeKind::Channel: n = dimName("[", {p[1] * 1000, p[0] * 1000}); break;
+    case ShapeKind::Angle: n = dimName("L", {p[0] * 1000, p[1] * 1000, p[2] * 1000}); break;
+    default: n = shapeName(k);
+    }
+    return sectionFromShape(n, s);
 }
 
 } // namespace fem

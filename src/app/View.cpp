@@ -472,8 +472,9 @@ void App::viewport() {
                 out.resize(br.x.size());
                 for (size_t k = 0; k < br.x.size(); ++k) {
                     const double sN = br.N[k] / sec.A;
-                    const double sM = (sec.I > 0 && el.type == ElemType::Frame) ? br.M[k] / sec.I * sec.h / 2 : 0.0;
-                    const double top = sN - sM, bot = sN + sM;
+                    const bool bend = sec.I > 0 && el.type == ElemType::Frame;
+                    const double top = sN - (bend ? br.M[k] / sec.I * sec.top() : 0.0);
+                    const double bot = sN + (bend ? br.M[k] / sec.I * sec.bot() : 0.0);
                     out[k] = (std::abs(top) > std::abs(bot) ? top : bot) * 1e-3; // MPa
                 }
             }

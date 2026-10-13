@@ -116,6 +116,11 @@ int main(int argc, char** argv) {
             const std::string f = argv[6];
             app.showEnvelope = f.find('e') != std::string::npos;
             if (f.find('k') != std::string::npos) app.startCommand("CTHH");
+            if (f.find('d') != std::string::npos) app.showSectionDesigner = true;
+            if (f.find('t') != std::string::npos) {
+                app.selElems = {1};
+                app.showSectionStress = true;
+            }
             if (f.find('l') != std::string::npos) {
                 app.darkTheme = false;
                 app.applyTheme();

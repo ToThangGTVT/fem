@@ -247,6 +247,8 @@ void App::modelPanel() {
         // ------------------------------------------------ tiết diện
         if (ImGui::BeginTabItem("Tiết diện")) {
             static double b = 0.3, h = 0.5, D = 0.2, t = 0.008;
+            if (ImGui::Button("Thiết kế tiết diện...")) showSectionDesigner = true;
+            ImGui::SameLine();
             if (ImGui::Button("+ Thêm")) {
                 snapshot();
                 m.sections.push_back(Section{});

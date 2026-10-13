@@ -60,6 +60,13 @@ và/hoặc quy từ tải trọng thẳng đứng của một bộ tải (m = |F
 **Tổ hợp tải trọng tự động theo TCVN 2737:1995**: phân loại tải thường xuyên/tạm thời, nhóm loại trừ
 (gió trái/phải, các sơ đồ chất hoạt tải), hệ số độ tin cậy γf; sinh tổ hợp cơ bản 1 (ψ = 1) và cơ bản 2 (ψ = 0,9).
 
+**Tiết diện** (Sức bền vật liệu, lệnh `TIETDIEN`): chữ nhật, T, I không đối xứng, hộp, ống, tròn, [, L, đa giác tùy ý
+có lỗ → A, trọng tâm, Jx, Jy, Jxy, mômen quán tính chính và góc trục chính, W thớ trên/dưới, bán kính quán tính,
+**lõi tiết diện**. Ứng suất σ trên biểu đồ dùng đúng khoảng cách thớ trên/dưới của tiết diện không đối xứng.
+
+**Ứng suất trên tiết diện** (lệnh `USTD`): biểu đồ σ(y) = N/A − M·y/J, τ(y) = Q·S(y)/(J·b(y)), vòng tròn Mohr,
+ứng suất chính và phương chính, kiểm tra theo thuyết bền 3 (Tresca) và 4 (von Mises).
+
 **Tải trên cạnh phần tử phẳng**: lực phân bố qx, qy hoặc áp lực pháp tuyến biến đổi tuyến tính p = p0 + k·y
 (ví dụ áp lực thủy tĩnh), quy về lực nút tương đương.
 
@@ -90,6 +97,7 @@ Gõ lệnh ở bất cứ đâu, không cần nhấp vào dòng lệnh. **Enter 
 | `TAINUT`, `TAIPB`, `TAITT`, `MOMEN` | tải nút, tải phân bố, lực tập trung, mômen |
 | `TINH` (F5), `PDELTA`, `CTHH` | tính tĩnh, bật/tắt P-Δ, cấu tạo hình học |
 | `ONDINH`, `DAODONG` | ổn định, dao động riêng |
+| `TIETDIEN`, `USTD` | thiết kế tiết diện, ứng suất trên tiết diện |
 | `DI`, `ID`, `LI`, `Z` | đo khoảng cách, tọa độ, liệt kê, zoom (`E` toàn bộ, `W` cửa sổ) |
 | `U`, `REDO` | hoàn tác, làm lại |
 
@@ -131,6 +139,7 @@ src/core/   lõi tính toán, không phụ thuộc giao diện
   PostProcess   biểu đồ bao, đường ảnh hưởng
   Eigen         ổn định, dao động riêng (Householder + QL cho ma trận đối xứng)
   Kinematics    phân tích cấu tạo hình học (ma trận cân bằng, hạng, không gian rỗng)
+  SectionGeom   đặc trưng hình học tiết diện, lõi tiết diện, mômen tĩnh và bề rộng tại cao độ
   Mesher        tạo lưới, chia thanh
   Library       vật liệu, thép hình
   ModelIO       đọc/ghi .fem, báo cáo

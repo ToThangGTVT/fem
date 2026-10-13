@@ -5,8 +5,8 @@ PLANE STRESS
 
 # MATERIAL tên E nu alpha gamma
 MATERIAL "Bê tông B25" 30000000 0.2 1e-05 25
-# SECTION tên A I h
-SECTION "CN 30x60" 0.18 0.0054 0.6
+# SECTION tên A I h [y_trên y_dưới] [SHAPE loại p1..p6 | POLY n x1 y1 ... (mỗi chu tuyến)]
+SECTION "CN 30x60" 0.18 0.0054 0.6 0.3 0.3 SHAPE 1 0.3 0.6 0 0 0 0
 
 # NODE x y
 NODE 0 0

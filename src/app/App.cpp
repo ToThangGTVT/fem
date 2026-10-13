@@ -388,6 +388,8 @@ void App::frame() {
     if (showAbout) aboutDialog();
     if (showEigenDialog) eigenDialog();
     if (showKinematics) kinematicsDialog();
+    if (showSectionDesigner) sectionDesigner();
+    if (showSectionStress) sectionStressDialog();
     if (showDemo) ImGui::ShowDemoWindow(&showDemo);
     savePrompt();
     clampIndices();

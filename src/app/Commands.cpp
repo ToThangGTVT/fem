@@ -894,6 +894,7 @@ std::vector<std::pair<std::string, std::string>> commandHelp() {
         {"TAINUT / TAIPB / TAITT / MOMEN", "tải nút / phân bố / lực tập trung / mômen"},
         {"TINH (F5), PDELTA", "tính toán; bật/tắt sơ đồ biến dạng P-Δ"},
         {"CTHH", "phân tích cấu tạo hình học: W, bậc siêu tĩnh, dạng biến hình"},
+        {"TIETDIEN / USTD", "thiết kế tiết diện (đặc trưng, lõi) / ứng suất trên tiết diện, vòng Mohr"},
         {"ONDINH / DAODONG", "ổn định / dao động riêng"},
         {"DI, ID, LI", "đo khoảng cách / tọa độ / liệt kê"},
         {"Z", "zoom (E: toàn bộ, W: cửa sổ)"},

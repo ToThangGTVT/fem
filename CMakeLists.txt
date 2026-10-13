@@ -24,6 +24,7 @@ add_library(femcore STATIC
   src/core/PostProcess.cpp
   src/core/Eigen.cpp
   src/core/Kinematics.cpp
+  src/core/SectionGeom.cpp
 )
 target_include_directories(femcore PUBLIC src)
 if(MSVC)
@@ -89,6 +90,7 @@ if(FEM_BUILD_GUI)
     src/app/View.cpp
     src/app/Commands.cpp
     src/app/Ribbon.cpp
+    src/app/SectionUI.cpp
   )
   target_link_libraries(fem2d PRIVATE femcore imgui)
   if(MSVC)

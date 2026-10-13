@@ -8,6 +8,7 @@
 #include "core/Eigen.h"
 #include "core/Examples.h"
 #include "core/Kinematics.h"
+#include "core/SectionGeom.h"
 #include "core/Library.h"
 #include "core/Mesher.h"
 #include "core/ModelIO.h"
@@ -915,7 +916,110 @@ static void testKinematics() {
     check(kt.W == 0 && kt.mechanisms == 1, "3 gối di động song song: tức thời biến hình", kt.mechanisms, 1);
 }
 
+static void testSectionGeom() {
+    std::puts("Đặc trưng hình học tiết diện");
+    {
+        const double b = 0.2, h = 0.4;
+        SectionShape sh;
+        sh.kind = ShapeKind::Rect;
+        sh.p = {b, h, 0, 0, 0, 0};
+        const auto c = shapeContours(sh);
+        const auto p = sectionProps(c);
+        near("CN: A", p.A, b * h);
+        near("CN: Jx = bh³/12", p.Jx, b * h * h * h / 12);
+        near("CN: Jy = hb³/12", p.Jy, h * b * b * b / 12);
+        near("CN: W = bh²/6", p.Wtop, b * h * h / 6);
+        double ky = 0, kx = 0;
+        for (const auto& v : p.kern) {
+            ky = std::max(ky, v[1] - p.yc);
+            kx = std::max(kx, v[0] - p.xc);
+        }
+        near("CN: lõi tiết diện h/6", ky, h / 6, 1e-9);
+        near("CN: lõi tiết diện b/6", kx, b / 6, 1e-9);
+        // τmax = 1,5 Q/A tại trọng tâm
+        const double S = staticMomentAbove(c, p.yc, p.yc), w = widthAt(c, p.yc);
+        near("CN: τmax = 1,5Q/A", 1.0 * S / (p.Jx * w), 1.5 / (b * h), 1e-9);
+    }
+    {
+        // chữ T: cánh 200×20, sườn 20×180 (mm)
+        const double bf = 0.2, tf = 0.02, bw = 0.02, h = 0.2;
+        SectionShape sh;
+        sh.kind = ShapeKind::Tee;
+        sh.p = {bf, tf, bw, h, 0, 0};
+        const auto c = shapeContours(sh);
+        const auto p = sectionProps(c);
+        const double A1 = bf * tf, A2 = bw * (h - tf), y1 = h - tf / 2, y2 = (h - tf) / 2, A = A1 + A2;
+        const double yc = (A1 * y1 + A2 * y2) / A;
+        const double J = bf * tf * tf * tf / 12 + A1 * (y1 - yc) * (y1 - yc) + bw * std::pow(h - tf, 3) / 12 +
+                         A2 * (y2 - yc) * (y2 - yc);
+        near("T: A", p.A, A);
+        near("T: trọng tâm", p.yc, yc);
+        near("T: Jx (định lý trục song song)", p.Jx, J);
+        near("T: y thớ trên", p.yTop, h - yc);
+        near("T: Jxy = 0 (đối xứng)", p.Jxy, 0, 0, 1e-15);
+        const Section sec = sectionFromShape("T", sh);
+        near("T: tiết diện mô hình yBot", sec.yBot, yc);
+    }
+    {
+        SectionShape sh;
+        sh.kind = ShapeKind::Pipe;
+        sh.p = {0.3, 0.01, 0, 0, 0, 0};
+        const auto p = sectionProps(shapeContours(sh));
+        const double D = 0.3, d = 0.28;
+        near("Ống: A (đa giác 180 cạnh)", p.A, M_PI * (D * D - d * d) / 4, 1e-3);
+        near("Ống: J", p.Jx, M_PI * (std::pow(D, 4) - std::pow(d, 4)) / 64, 1e-3);
+        SectionShape cs;
+        cs.kind = ShapeKind::Circle;
+        cs.p = {0.4, 0, 0, 0, 0, 0};
+        const auto pc = sectionProps(shapeContours(cs));
+        double r = 0;
+        for (const auto& v : pc.kern) r = std::max(r, std::hypot(v[0] - pc.xc, v[1] - pc.yc));
+        near("Tròn: lõi tiết diện bán kính D/8", r, 0.4 / 8, 2e-3);
+    }
+    {
+        // thép góc đều cạnh: trục chính nghiêng 45°
+        SectionShape sh;
+        sh.kind = ShapeKind::Angle;
+        sh.p = {0.1, 0.1, 0.01, 0, 0, 0};
+        const auto p = sectionProps(shapeContours(sh));
+        near("L đều cạnh: |α| = 45°", std::abs(p.alpha), 45, 1e-6);
+        check(p.Jxy < 0, "L: Jxy < 0 (phần lớn diện tích ở góc phần tư II, IV quanh trọng tâm)", p.Jxy, 0);
+        near("L: J1 + J2 = Jx + Jy", p.J1 + p.J2, p.Jx + p.Jy, 1e-12);
+    }
+    {
+        // hộp = chữ nhật ngoài − chữ nhật trong
+        SectionShape sh;
+        sh.kind = ShapeKind::Box;
+        sh.p = {0.3, 0.5, 0.02, 0, 0, 0};
+        const auto c = shapeContours(sh);
+        const auto p = sectionProps(c);
+        near("Hộp: Jx", p.Jx, (0.3 * std::pow(0.5, 3) - 0.26 * std::pow(0.46, 3)) / 12);
+        near("Hộp: bề rộng tại thành = 2t", widthAt(c, 0.25), 0.04, 1e-12);
+    }
+    {
+        // ghi/đọc file giữ hình dạng
+        Model m;
+        SectionShape sh;
+        sh.kind = ShapeKind::Tee;
+        sh.p = {0.2, 0.02, 0.02, 0.2, 0, 0};
+        m.sections.push_back(sectionFromShape("T", sh));
+        SectionShape poly;
+        poly.kind = ShapeKind::Polygon;
+        poly.contours = {{{0, 0}, {0.1, 0}, {0.05, 0.1}}};
+        m.sections.push_back(sectionFromShape("tam giác", poly));
+        std::string err;
+        Model r;
+        const bool ok = modelFromText(modelToText(m), r, err);
+        check(ok && r.sections.size() == 2 && r.sections[0].shape.kind == ShapeKind::Tee &&
+                  std::abs(r.sections[0].yTop - m.sections[0].yTop) < 1e-12 && r.sections[1].shape.contours.size() == 1 &&
+                  r.sections[1].shape.contours[0].size() == 3,
+              "ghi/đọc tiết diện có hình dạng", 0, 0);
+        near("tam giác: J = bh³/36", sectionProps(r.sections[1].shape.contours).Jx, 0.1 * 1e-3 / 36, 1e-9);
+    }
+}
+
 int main() {
+    testSectionGeom();
     testLackOfFit();
     testPDelta();
     testFoundations();

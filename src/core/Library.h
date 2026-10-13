@@ -29,5 +29,6 @@ Section toSection(const ProfilePreset& p);
 Section rectSection(double b, double h);           // m
 Section circleSection(double d);                   // m
 Section pipeSection(double D, double t);           // m
+Section shapeSection(ShapeKind k, const std::array<double, 6>& p); // tiết diện T, I, hộp, [, L (m)
 
 } // namespace fem

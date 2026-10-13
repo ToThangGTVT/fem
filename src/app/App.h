@@ -110,6 +110,7 @@ struct App {
     fem::KinematicResult kin;
     int kinVersion = -1;
     bool showKinematics = false;
+    bool showSectionDesigner = false, showSectionStress = false;
 
     // ---- dòng lệnh kiểu AutoCAD
     std::unique_ptr<Command> cmd;
@@ -200,6 +201,8 @@ struct App {
     void aboutDialog();
     void eigenDialog();
     void kinematicsDialog();
+    void sectionDesigner();
+    void sectionStressDialog();
     void showMechanism();
     void runEigen();
     void viewport();

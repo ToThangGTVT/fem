@@ -822,6 +822,7 @@ void App::ribbon() {
                 changed();
             }
             ImGui::EndDisabled();
+            if (bigButton("Thiết kế\ntiết diện", Icon::Props, "Đặc trưng hình học, lõi tiết diện (lệnh TIETDIEN)")) startCommand("TIETDIEN");
         }
         endPanel("Thuộc tính thanh");
 
@@ -986,6 +987,9 @@ void App::ribbon() {
             ImGui::SameLine(0, 6);
         }
         endPanel("Tỉ lệ");
+        beginPanel();
+        if (bigButton("Ứng suất\ntiết diện", Icon::Sigma, "σ, τ trên tiết diện, vòng Mohr, thuyết bền (lệnh USTD)")) startCommand("USTD");
+        endPanel("Tiết diện");
         beginPanel();
         if (bigButton("Báo cáo", Icon::Report, "Xuất báo cáo kết quả (.txt)")) requestReport();
         endPanel("Xuất");
@@ -1271,6 +1275,15 @@ void App::startCommand(const std::string& raw) {
             echo("W = " + std::to_string(kin.W) + ", " + kin.verdict);
             if (!kin.mechanismU.empty()) showMechanism();
         } else echo(kin.note);
+        return;
+    }
+    if (is({"TIETDIEN", "SECTION", "TDN"})) {
+        showSectionDesigner = true;
+        return;
+    }
+    if (is({"USTD", "SECSTRESS"})) {
+        showSectionStress = true;
+        if (view == ResultView::None) view = ResultView::M;
         return;
     }
     if (is({"PDELTA"})) {

@@ -1,5 +1,7 @@
 #include "core/ModelIO.h"
 
+#include "core/SectionGeom.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -81,9 +83,21 @@ std::string modelToText(const Model& m) {
     for (const auto& x : m.materials)
         o << "MATERIAL " << quote(x.name) << " " << num(x.E) << " " << num(x.nu) << " " << num(x.alpha) << " "
           << num(x.gamma) << "\n";
-    o << "# SECTION tên A I h\n";
-    for (const auto& x : m.sections)
-        o << "SECTION " << quote(x.name) << " " << num(x.A) << " " << num(x.I) << " " << num(x.h) << "\n";
+    o << "# SECTION tên A I h [y_trên y_dưới] [SHAPE loại p1..p6 | POLY n x1 y1 ... (mỗi chu tuyến)]\n";
+    for (const auto& x : m.sections) {
+        o << "SECTION " << quote(x.name) << " " << num(x.A) << " " << num(x.I) << " " << num(x.h);
+        if (x.yTop > 0 || x.yBot > 0) o << " " << num(x.yTop) << " " << num(x.yBot);
+        if (x.shape.kind == ShapeKind::Polygon) {
+            for (const auto& c : x.shape.contours) {
+                o << " POLY " << c.size();
+                for (const auto& v : c) o << " " << num(v[0]) << " " << num(v[1]);
+            }
+        } else if (x.shape.kind != ShapeKind::None) {
+            o << " SHAPE " << (int)x.shape.kind;
+            for (double v : x.shape.p) o << " " << num(v);
+        }
+        o << "\n";
+    }
     o << "\n# NODE x y\n";
     for (const auto& n : m.nodes) o << "NODE " << num(n.x) << " " << num(n.y) << "\n";
     o << "\n# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf [kG chỉ_nén] | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im\n";
@@ -184,6 +198,28 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
             x.A = d(2);
             x.I = d(3);
             x.h = d(4, 0.0);
+            size_t i = 5;
+            if (t.size() > 6 && t[5] != "SHAPE" && t[5] != "POLY") {
+                x.yTop = d(5);
+                x.yBot = d(6);
+                i = 7;
+            }
+            while (i < t.size()) {
+                if (t[i] == "SHAPE") {
+                    x.shape.kind = (ShapeKind)(int)d(i + 1);
+                    for (int k = 0; k < 6; ++k) x.shape.p[k] = d(i + 2 + k);
+                    i += 8;
+                } else if (t[i] == "POLY" && i + 1 < t.size()) {
+                    x.shape.kind = ShapeKind::Polygon;
+                    const int n = (int)d(i + 1);
+                    Contour c;
+                    for (int k = 0; k < n; ++k) c.push_back({d(i + 2 + 2 * k), d(i + 3 + 2 * k)});
+                    x.shape.contours.push_back(c);
+                    i += 2 + 2 * n;
+                } else {
+                    ++i;
+                }
+            }
             m.sections.push_back(x);
         } else if (k == "NODE") {
             if (!need(3)) return fail("NODE thiếu tọa độ");
