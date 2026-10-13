@@ -1,4 +1,5 @@
 // Kiểm chứng lõi tính toán với lời giải giải tích.
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <functional>
