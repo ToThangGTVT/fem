@@ -506,7 +506,7 @@ void endColumn() {
     ImGui::SameLine(0, 6);
 }
 
-bool iconButton(const char* id, Icon icon, const char* tip, float sz = 22) {
+bool iconButton(const char* id, Icon icon, const char* tip, float sz = 28) {
     ImGui::PushID(id);
     const ImVec2 p = ImGui::GetCursorScreenPos();
     const bool pressed = ImGui::InvisibleButton("##i", ImVec2(sz, sz));
@@ -514,7 +514,7 @@ bool iconButton(const char* id, Icon icon, const char* tip, float sz = 22) {
         ImGui::GetWindowDrawList()->AddRectFilled(p, ImVec2(p.x + sz, p.y + sz), R.app->ui.hover, 3);
         if (tip) ImGui::SetTooltip("%s", tip);
     }
-    drawIcon(ImGui::GetWindowDrawList(), icon, ImVec2(p.x + sz * 0.5f, p.y + sz * 0.5f), sz * 0.72f, R.ic);
+    drawIcon(ImGui::GetWindowDrawList(), icon, ImVec2(p.x + sz * 0.5f, p.y + sz * 0.5f), sz * 0.86f, R.ic);
     ImGui::PopID();
     return pressed;
 }
@@ -690,7 +690,7 @@ void App::ribbon() {
     }
     appMenu();
     ImGui::SameLine(0, 10);
-    ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, w0.y + 4));
+    ImGui::SetCursorScreenPos(ImVec2(ImGui::GetCursorScreenPos().x, w0.y + 1));
     if (iconButton("new", Icon::New, "Mới (Ctrl+N)") && confirmDiscard(Pending::New)) newModel();
     ImGui::SameLine(0, 2);
     if (iconButton("open", Icon::Open, "Mở (Ctrl+O)") && confirmDiscard(Pending::Open)) requestOpen();
@@ -724,9 +724,9 @@ void App::ribbon() {
     {
         const std::string t = windowTitle();
         const ImVec2 ts = ImGui::CalcTextSize(t.c_str());
-        const float x = w0.x + wsz.x - ts.x - 44;
+        const float x = w0.x + wsz.x - ts.x - 48;
         if (x > ImGui::GetCursorScreenPos().x + 20) dl->AddText(ImVec2(x, w0.y + (rowH - ts.y) * 0.5f), ui.textDim, t.c_str());
-        ImGui::SetCursorScreenPos(ImVec2(w0.x + wsz.x - 32, w0.y + 4));
+        ImGui::SetCursorScreenPos(ImVec2(w0.x + wsz.x - 36, w0.y + 1));
         if (iconButton("theme", darkTheme ? Icon::Sun : Icon::Moon, darkTheme ? "Chuyển sang giao diện sáng" : "Chuyển sang giao diện tối")) {
             darkTheme = !darkTheme;
             applyTheme();
