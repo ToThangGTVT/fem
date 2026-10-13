@@ -1,5 +1,6 @@
 // Hậu xử lý: biểu đồ bao nội lực, đường ảnh hưởng.
 #pragma once
+#include <array>
 #include <string>
 #include <vector>
 
@@ -75,5 +76,16 @@ struct TrainResult {
 // Tung độ đường ảnh hưởng tại hoành độ X (theo hình chiếu ngang dọc đường chạy)
 double ilValueAtX(const InfluenceLine& il, double X);
 TrainResult moveTrain(const InfluenceLine& il, const LoadTrain& t);
+
+// ---------------------------------------------------------------- hình học biểu đồ (xuất DXF, SVG)
+// Đường gốc và đường biểu đồ của thanh e theo tọa độ thực (m); qty: N, Q, M. M vẽ về phía thớ căng (−y cục bộ),
+// N, Q vẽ về phía +y cục bộ. scale: m trên một đơn vị nội lực.
+struct DiagramGeom {
+    std::vector<std::array<double, 2>> base, off;
+    std::vector<double> values;
+};
+DiagramGeom diagramGeometry(const Model& m, const LoadSetResult& s, int e, BarQty qty, double scale);
+// Hệ số tỉ lệ để biểu đồ lớn nhất bằng một phần kích thước kết cấu
+double autoDiagramScale(const Model& m, const LoadSetResult& s, BarQty qty, double fraction = 0.08);
 
 } // namespace fem

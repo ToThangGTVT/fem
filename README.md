@@ -116,6 +116,13 @@ có lỗ → A, trọng tâm, Jx, Jy, Jxy, mômen quán tính chính và góc tr
 
 **Cọc chịu tải ngang theo phương pháp "m"** (lệnh `COC`): hệ số nền tăng tuyến tính theo độ sâu, bề rộng quy ước bp.
 
+**Liên thông AutoCAD — DXF**: nhập bản vẽ (LINE, LWPOLYLINE, POLYLINE; lọc theo lớp; đơn vị mm/cm/m; tự gộp nút và cắt
+thanh tại điểm nối chữ T) và xuất sơ đồ, biểu đồ nội lực, giá trị, hình biến dạng ra DXF R12 theo các lớp riêng
+(`FEM_THANH`, `FEM_BIEUDO_DUONG`, `FEM_BIEUDO_AM`, `FEM_GIATRI`...). Lệnh `DXFIN`, `DXFOUT`.
+
+**Báo cáo HTML có hình** (lệnh `BAOCAO`): sơ đồ, dữ liệu, biểu đồ M, Q, N, hình biến dạng (SVG), bảng phản lực,
+chuyển vị, nội lực; mở bằng trình duyệt và in ra PDF.
+
 **Tải trên cạnh phần tử phẳng**: lực phân bố qx, qy hoặc áp lực pháp tuyến biến đổi tuyến tính p = p0 + k·y
 (ví dụ áp lực thủy tĩnh), quy về lực nút tương đương.
 
@@ -145,6 +152,7 @@ Gõ lệnh ở bất cứ đâu, không cần nhấp vào dòng lệnh. **Enter 
 | `NGAM`, `KHOP`, `DIDONG`, `DIDONGX`, `NGAMTRUOT`, `BOGOI` | gối tựa |
 | `TAINUT`, `TAIPB`, `TAITT`, `MOMEN` | tải nút, tải phân bố, lực tập trung, mômen |
 | `TINH` (F5), `PDELTA`, `CTHH` | tính tĩnh, bật/tắt P-Δ, cấu tạo hình học |
+| `DXFIN`, `DXFOUT`, `BAOCAO` | nhập/xuất DXF, báo cáo HTML |
 | `KTTK`, `COC` | kiểm tra thiết kế, tạo cọc chịu tải ngang |
 | `ONDINH`, `DAODONG`, `DONGLUC` | ổn định, dao động riêng, động lực học |
 | `TIETDIEN`, `USTD` | thiết kế tiết diện, ứng suất trên tiết diện |
@@ -194,6 +202,7 @@ src/core/   lõi tính toán, không phụ thuộc giao diện
   ForceMethod   phương pháp lực, Maxwell–Mohr, phương pháp chuyển vị dạng ma trận
   Dynamics      phổ phản ứng TCVN 9386, dao động cưỡng bức, Newmark
   Design        cấu kiện, kiểm tra thép, BTCT, độ võng, cọc phương pháp m
+  Dxf, Report   nhập/xuất DXF, báo cáo HTML có hình SVG
   Mesher        tạo lưới, chia thanh
   Library       vật liệu, thép hình
   ModelIO       đọc/ghi .fem, báo cáo

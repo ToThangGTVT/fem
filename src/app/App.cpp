@@ -5,10 +5,12 @@
 #include <algorithm>
 #include <cstdio>
 #include <fstream>
+#include <sstream>
 
 #include "core/Examples.h"
 #include "core/Library.h"
 #include "core/ModelIO.h"
+#include "core/Report.h"
 #include "imgui_internal.h"
 
 using namespace fem;
@@ -19,6 +21,21 @@ constexpr size_t kMaxUndo = 60;
 
 const SDL_DialogFileFilter kFemFilter[] = {{"Mô hình FEM2D (*.fem)", "fem"}, {"Tất cả", "*"}};
 const SDL_DialogFileFilter kTxtFilter[] = {{"Báo cáo (*.txt)", "txt"}};
+const SDL_DialogFileFilter kDxfFilter[] = {{"Bản vẽ DXF (*.dxf)", "dxf"}, {"Tất cả", "*"}};
+const SDL_DialogFileFilter kHtmlFilter[] = {{"Trang HTML (*.html)", "html"}};
+
+std::string readFileText(const std::string& path) {
+    std::ifstream f(path, std::ios::binary);
+    std::stringstream ss;
+    ss << f.rdbuf();
+    return ss.str();
+}
+
+std::string withExt(std::string p, const char* ext) {
+    const std::string e = ext;
+    if (p.size() < e.size() || p.substr(p.size() - e.size()) != e) p += e;
+    return p;
+}
 
 std::string fileName(const std::string& p) {
     const size_t k = p.find_last_of("/\\");
@@ -318,13 +335,81 @@ void App::requestReport() {
         this, window, kTxtFilter, 1, "ket_qua.txt");
 }
 
+void App::requestDxfIn() {
+    SDL_ShowOpenFileDialog(
+        [](void* ud, const char* const* list, int) {
+            if (!list || !list[0]) return;
+            App* a = (App*)ud;
+            std::lock_guard<std::mutex> lk(a->dialogMutex);
+            a->dialogDxfIn = list[0];
+        },
+        this, window, kDxfFilter, 2, nullptr, false);
+}
+
+void App::requestDxfOut() {
+    SDL_ShowSaveFileDialog(
+        [](void* ud, const char* const* list, int) {
+            if (!list || !list[0]) return;
+            App* a = (App*)ud;
+            std::lock_guard<std::mutex> lk(a->dialogMutex);
+            a->dialogDxfOut = list[0];
+        },
+        this, window, kDxfFilter, 1, "ket_cau.dxf");
+}
+
+void App::requestHtml() {
+    SDL_ShowSaveFileDialog(
+        [](void* ud, const char* const* list, int) {
+            if (!list || !list[0]) return;
+            App* a = (App*)ud;
+            std::lock_guard<std::mutex> lk(a->dialogMutex);
+            a->dialogHtml = list[0];
+        },
+        this, window, kHtmlFilter, 1, "bao_cao.html");
+}
+
 void App::processDialogs() {
-    std::string open, save, report;
+    std::string open, save, report, dxfIn, dxfOut, html;
     {
         std::lock_guard<std::mutex> lk(dialogMutex);
         open.swap(dialogOpenPath);
         save.swap(dialogSavePath);
         report.swap(dialogReportPath);
+        dxfIn.swap(dialogDxfIn);
+        dxfOut.swap(dialogDxfOut);
+        html.swap(dialogHtml);
+    }
+    if (!dxfIn.empty()) {
+        dxfText = readFileText(dxfIn);
+        dxfPath = dxfIn;
+        dxfLayerList = dxfLayers(dxfText);
+        dxfLayer = -1;
+        showDxfImport = true;
+        if (dxfLayerList.empty()) addLog("Lỗi: bản vẽ không có đoạn thẳng nào.");
+    }
+    if (!dxfOut.empty()) {
+        dxfOut = withExt(dxfOut, ".dxf");
+        DxfExportOptions o;
+        const LoadSetResult* rs = overrideShown();
+        if (!rs) rs = currentSet();
+        o.diagram = view == ResultView::N || view == ResultView::Q || view == ResultView::M;
+        o.qty = view == ResultView::N ? BarQty::N : view == ResultView::Q ? BarQty::Q : BarQty::M;
+        o.deformed = view == ResultView::Deformed;
+        o.values = showValues;
+        std::ofstream f(dxfOut, std::ios::binary);
+        if (f) {
+            f << exportDxf(model, (o.diagram || o.deformed) ? rs : nullptr, o);
+            addLog("Đã xuất DXF " + dxfOut);
+        } else addLog("Lỗi: không ghi được " + dxfOut);
+    }
+    if (!html.empty()) {
+        html = withExt(html, ".html");
+        if (needAnalyze) analyzeNow();
+        std::ofstream f(html, std::ios::binary);
+        if (f) {
+            f << htmlReport(model, result);
+            addLog("Đã xuất báo cáo HTML " + html + " (mở bằng trình duyệt, in ra PDF)");
+        } else addLog("Lỗi: không ghi được " + html);
     }
     if (!open.empty()) openFile(open);
     if (!save.empty() && pending != Pending::None) {
@@ -394,6 +479,7 @@ void App::frame() {
     if (showMatrixMethod) matrixMethodDialog();
     if (showArchGen) archDialog();
     if (showDynamics) dynamicsDialog();
+    if (showDxfImport) dxfImportDialog();
     if (showDesign) designDialog();
     else util.clear();
     if (showPileGen) pileDialog();
@@ -566,5 +652,58 @@ void App::runEigen() {
         std::snprintf(b, sizeof b, "Dao động: f1 = %.4g Hz, T1 = %.4g s (%d phương trình, %.0f ms)", eig.modes[0].freq,
                       eig.modes[0].period, eig.numEquations, eig.timeMs);
     addLog(b);
+}
+
+void App::dxfImportDialog() {
+    ImGui::SetNextWindowSize(ImVec2(420, 0), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Nhập bản vẽ DXF", &showDxfImport)) {
+        ImGui::End();
+        return;
+    }
+    ImGui::TextWrapped("%s", dxfPath.c_str());
+    ImGui::TextDisabled("Đoạn thẳng (LINE, LWPOLYLINE, POLYLINE) → thanh; nút trùng được gộp, thanh tự cắt tại điểm nối chữ T.");
+    ImGui::SetNextItemWidth(220);
+    if (ImGui::BeginCombo("Lớp (layer)", dxfLayer < 0 ? "Mọi lớp" : dxfLayerList[dxfLayer].c_str())) {
+        if (ImGui::Selectable("Mọi lớp", dxfLayer < 0)) dxfLayer = -1;
+        for (int i = 0; i < (int)dxfLayerList.size(); ++i)
+            if (ImGui::Selectable(dxfLayerList[i].c_str(), i == dxfLayer)) dxfLayer = i;
+        ImGui::EndCombo();
+    }
+    const char* units[] = {"mm", "cm", "m"};
+    ImGui::SetNextItemWidth(100);
+    ImGui::Combo("Đơn vị bản vẽ", &dxfUnit, units, 3);
+    ImGui::RadioButton("Thanh khung", &dxfType, 0);
+    ImGui::SameLine();
+    ImGui::RadioButton("Thanh dàn", &dxfType, 1);
+    ImGui::Checkbox("Thay thế mô hình hiện tại", &dxfReplace);
+    if (ImGui::Button("Nhập", ImVec2(-FLT_MIN, 0))) {
+        snapshot();
+        if (dxfReplace) {
+            Model nm;
+            nm.materials = model.materials;
+            nm.sections = model.sections;
+            nm.title = "Nhập từ DXF";
+            nm.cases.push_back(LoadCase("TH1"));
+            model = nm;
+        }
+        DxfImportOptions o;
+        o.unit = dxfUnit == 0 ? 0.001 : dxfUnit == 1 ? 0.01 : 1.0;
+        o.type = dxfType == 0 ? ElemType::Frame : ElemType::Truss;
+        o.layer = dxfLayer >= 0 ? dxfLayerList[dxfLayer] : "";
+        o.mat = curMat;
+        o.sec = curSec;
+        const DxfImportResult r = importDxf(dxfText, model, o);
+        if (r.ok) {
+            addLog("Đã nhập " + std::to_string(r.lines) + " đoạn thẳng → " + std::to_string(r.elements) + " thanh, " +
+                   std::to_string(r.nodes) + " nút (cắt " + std::to_string(r.splits) + " chỗ nối chữ T).");
+            fitRequested = true;
+            showDxfImport = false;
+            changed();
+        } else {
+            undoStack.pop_back();
+            addLog("Lỗi: " + r.error);
+        }
+    }
+    ImGui::End();
 }
 

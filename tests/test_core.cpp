@@ -6,7 +6,9 @@
 
 #include "core/Analysis.h"
 #include "core/Design.h"
+#include "core/Dxf.h"
 #include "core/Dynamics.h"
+#include "core/Report.h"
 #include "core/Eigen.h"
 #include "core/Examples.h"
 #include "core/ForceMethod.h"
@@ -1331,7 +1333,62 @@ static void testDesign() {
     }
 }
 
+static void testDxfReport() {
+    std::puts("DXF và báo cáo HTML");
+    auto ex = [](const char* name) {
+        for (const auto& e : examples())
+            if (std::string(e.name) == name) return e.build();
+        return Model{};
+    };
+    {
+        const Model pf = ex("Khung 2 tầng 2 nhịp");
+        const auto r = analyze(pf);
+        DxfExportOptions o;
+        const std::string dxf = exportDxf(pf, &r.sets[0], o);
+        check(dxf.find("ENTITIES") != std::string::npos && dxf.find("FEM_BIEUDO") != std::string::npos, "xuất DXF có biểu đồ", 0, 0);
+        Model m;
+        DxfImportOptions io;
+        io.layer = "FEM_THANH";
+        const auto ir = importDxf(dxf, m, io);
+        check(ir.ok && m.elements.size() == pf.elements.size() && m.nodes.size() == pf.nodes.size(),
+              "xuất rồi nhập lại lớp FEM_THANH: giữ số thanh, số nút", (double)m.elements.size(), (double)pf.elements.size());
+    }
+    {
+        // hai đoạn thẳng chữ T (mm) và một polyline kín
+        const std::string dxf =
+            "0\nSECTION\n2\nENTITIES\n"
+            "0\nLINE\n8\nKC\n10\n0\n20\n0\n11\n6000\n21\n0\n"
+            "0\nLINE\n8\nKC\n10\n3000\n20\n0\n11\n3000\n21\n3000\n"
+            "0\nLWPOLYLINE\n8\nKHAC\n90\n4\n70\n1\n10\n0\n20\n5000\n10\n1000\n20\n5000\n10\n1000\n20\n6000\n10\n0\n20\n6000\n"
+            "0\nENDSEC\n0\nEOF\n";
+        Model m;
+        DxfImportOptions io;
+        io.unit = 0.001;
+        io.layer = "KC";
+        auto ir = importDxf(dxf, m, io);
+        check(ir.ok && m.elements.size() == 3 && m.nodes.size() == 4 && ir.splits == 1, "chữ T: dầm tự cắt tại chân cột (3 thanh, 4 nút)",
+              (double)m.elements.size(), 3);
+        check(std::abs(m.nodes[1].x - 6.0) < 1e-12, "đổi đơn vị mm → m", m.nodes[1].x, 6);
+        Model m2;
+        io.layer = "KHAC";
+        ir = importDxf(dxf, m2, io);
+        check(ir.ok && m2.elements.size() == 4, "polyline kín: 4 thanh", (double)m2.elements.size(), 4);
+        check(dxfLayers(dxf).size() == 2, "liệt kê lớp", (double)dxfLayers(dxf).size(), 2);
+    }
+    {
+        const Model m = ex("Khung 1 tầng 1 nhịp");
+        const auto r = analyze(m);
+        const std::string h = htmlReport(m, r);
+        check(h.find("<svg") != std::string::npos && h.find("Biểu đồ mômen") != std::string::npos && h.size() > 5000,
+              "báo cáo HTML có hình biểu đồ", (double)h.size(), 0);
+        const Model d = ex("Dầm-tường (ứng suất phẳng)");
+        const std::string h2 = htmlReport(d, analyze(d));
+        check(h2.find("Ứng suất tại nút") != std::string::npos, "báo cáo HTML phần tử phẳng", 0, 0);
+    }
+}
+
 int main() {
+    testDxfReport();
     testDesign();
     testDynamics();
     testArchTaperTrain();

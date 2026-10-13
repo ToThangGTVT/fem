@@ -634,7 +634,11 @@ void App::appMenu() {
         }
         ImGui::EndMenu();
     }
-    if (ImGui::MenuItem("Xuất báo cáo kết quả...")) requestReport();
+    if (ImGui::MenuItem("Nhập bản vẽ DXF...")) requestDxfIn();
+    if (ImGui::MenuItem("Xuất DXF (sơ đồ / biểu đồ đang xem)...")) requestDxfOut();
+    ImGui::Separator();
+    if (ImGui::MenuItem("Xuất báo cáo HTML (có hình)...")) requestHtml();
+    if (ImGui::MenuItem("Xuất báo cáo văn bản (.txt)...")) requestReport();
     ImGui::Separator();
     if (ImGui::MenuItem("Giao diện tối", nullptr, darkTheme)) {
         darkTheme = true;
@@ -1002,7 +1006,9 @@ void App::ribbon() {
         if (bigButton("Ứng suất\ntiết diện", Icon::Sigma, "σ, τ trên tiết diện, vòng Mohr, thuyết bền (lệnh USTD)")) startCommand("USTD");
         endPanel("Tiết diện");
         beginPanel();
-        if (bigButton("Báo cáo", Icon::Report, "Xuất báo cáo kết quả (.txt)")) requestReport();
+        if (bigButton("Báo cáo\nHTML", Icon::Report, "Báo cáo có hình biểu đồ, mở bằng trình duyệt và in ra PDF (lệnh BAOCAO)"))
+            requestHtml();
+        if (bigButton("Xuất\nDXF", Icon::Save, "Xuất sơ đồ và biểu đồ đang xem ra bản vẽ DXF cho AutoCAD (lệnh DXFOUT)")) requestDxfOut();
         endPanel("Xuất");
         break;
     }
@@ -1296,6 +1302,18 @@ void App::startCommand(const std::string& raw) {
     if (is({"USTD", "SECSTRESS"})) {
         showSectionStress = true;
         if (view == ResultView::None) view = ResultView::M;
+        return;
+    }
+    if (is({"DXFIN", "IMPORT"})) {
+        requestDxfIn();
+        return;
+    }
+    if (is({"DXFOUT", "EXPORT"})) {
+        requestDxfOut();
+        return;
+    }
+    if (is({"BAOCAO", "REPORT"})) {
+        requestHtml();
         return;
     }
     if (is({"KTTK", "DESIGN"})) {

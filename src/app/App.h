@@ -8,6 +8,7 @@
 
 #include "core/Analysis.h"
 #include "core/Design.h"
+#include "core/Dxf.h"
 #include "core/Dynamics.h"
 #include "core/Eigen.h"
 #include "core/ForceMethod.h"
@@ -181,7 +182,12 @@ struct App {
     std::vector<std::string> log;
     SDL_Window* window = nullptr;
     std::mutex dialogMutex;
-    std::string dialogOpenPath, dialogSavePath, dialogReportPath;
+    std::string dialogOpenPath, dialogSavePath, dialogReportPath, dialogDxfIn, dialogDxfOut, dialogHtml;
+    // nhập DXF
+    bool showDxfImport = false, dxfReplace = false;
+    std::string dxfText, dxfPath;
+    std::vector<std::string> dxfLayerList;
+    int dxfLayer = -1, dxfUnit = 0, dxfType = 0;
 
     // ---- thao tác
     void newModel();
@@ -191,6 +197,10 @@ struct App {
     void requestOpen();
     void requestSave(bool saveAs);
     void requestReport();
+    void requestDxfIn();
+    void requestDxfOut();
+    void requestHtml();
+    void dxfImportDialog();
     void processDialogs();
 
     void snapshot();          // lưu trạng thái hiện tại vào ngăn hoàn tác

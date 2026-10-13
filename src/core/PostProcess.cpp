@@ -316,5 +316,35 @@ TrainResult moveTrain(const InfluenceLine& il, const LoadTrain& t) {
     return r;
 }
 
+DiagramGeom diagramGeometry(const Model& m, const LoadSetResult& s, int e, BarQty qty, double scale) {
+    DiagramGeom g;
+    if (e < 0 || e >= (int)m.elements.size() || !m.elements[e].isBar() || e >= (int)s.bars.size()) return g;
+    const Element& el = m.elements[e];
+    const Node& a = m.nodes[el.n[0]];
+    const Node& b = m.nodes[el.n[1]];
+    const double L = std::hypot(b.x - a.x, b.y - a.y), c = (b.x - a.x) / L, sn = (b.y - a.y) / L;
+    const double sign = qty == BarQty::M ? -1.0 : 1.0;
+    const BarResult& r = s.bars[e];
+    const std::vector<double>& v = barValues(r, qty);
+    for (size_t k = 0; k < r.x.size(); ++k) {
+        const double bx = a.x + c * r.x[k], by = a.y + sn * r.x[k], d = sign * v[k] * scale;
+        g.base.push_back({bx, by});
+        g.off.push_back({bx - sn * d, by + c * d}); // trục y cục bộ (−s, c)
+        g.values.push_back(v[k]);
+    }
+    return g;
+}
+
+double autoDiagramScale(const Model& m, const LoadSetResult& s, BarQty qty, double fraction) {
+    double vmax = 0;
+    for (size_t e = 0; e < m.elements.size() && e < s.bars.size(); ++e)
+        if (m.elements[e].isBar())
+            for (double v : barValues(s.bars[e], qty)) vmax = std::max(vmax, std::abs(v));
+    double x0, y0, x1, y1;
+    m.bounds(x0, y0, x1, y1);
+    const double size = std::max({x1 - x0, y1 - y0, 1.0});
+    return vmax > 0 ? fraction * size / vmax : 0;
+}
+
 } // namespace fem
 
