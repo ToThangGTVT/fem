@@ -121,6 +121,14 @@ void subdivideBar(Model& m, int e, int n) {
                     added.push_back(p);
                 }
                 break;
+            case ElemLoadKind::LackOfFit: // ΔL chia đều cho các đoạn
+                l.q1 /= n;
+                for (int k = 1; k < n; ++k) {
+                    ElemLoad p = l;
+                    p.elem = ids[k];
+                    added.push_back(p);
+                }
+                break;
             }
         }
         lc.elem.insert(lc.elem.end(), added.begin(), added.end());
@@ -229,6 +237,14 @@ int splitBarAt(Model& m, int e, double t) {
             case ElemLoadKind::Temperature: {
                 ElemLoad r = l;
                 r.elem = e2;
+                added.push_back(r);
+                break;
+            }
+            case ElemLoadKind::LackOfFit: {
+                ElemLoad r = l;
+                r.elem = e2;
+                r.q1 = l.q1 * (1 - t);
+                l.q1 *= t;
                 added.push_back(r);
                 break;
             }

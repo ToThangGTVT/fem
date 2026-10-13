@@ -115,6 +115,7 @@ int main(int argc, char** argv) {
             // cờ: e = biểu đồ bao; m<thanh>:<x> = đah M tại tiết diện; q<thanh>:<x> = đah Q
             const std::string f = argv[6];
             app.showEnvelope = f.find('e') != std::string::npos;
+            if (f.find('k') != std::string::npos) app.startCommand("CTHH");
             if (f.find('l') != std::string::npos) {
                 app.darkTheme = false;
                 app.applyTheme();

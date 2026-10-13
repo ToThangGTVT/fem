@@ -10,7 +10,7 @@
 
 namespace fem {
 
-enum class EigenKind { Buckling = 0, Vibration = 1 };
+enum class EigenKind { Buckling = 0, Vibration = 1, Mechanism = 2 };
 
 struct EigenOptions {
     EigenKind kind = EigenKind::Buckling;

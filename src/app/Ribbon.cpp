@@ -898,9 +898,17 @@ void App::ribbon() {
         if (bigButton("Tính\n(F5)", Icon::Run, "Phân tích tĩnh tuyến tính")) startCommand("TINH");
         beginColumn();
         ImGui::Checkbox("Tự động tính", &autoAnalyze);
+        {
+            bool so = model.secondOrder;
+            if (ImGui::Checkbox("Sơ đồ biến dạng (P-Δ)", &so)) startCommand("PDELTA");
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("Phân tích bậc hai: kể ảnh hưởng của lực dọc lên độ cứng (lệnh PDELTA)");
+        }
         ImGui::TextColored(ImGui::ColorConvertU32ToFloat4(ui.textDim), result.ok ? "%d phương trình" : "Chưa tính", result.numEquations);
         endColumn();
         endPanel("Tĩnh học");
+        beginPanel();
+        if (bigButton("Cấu tạo\nhình học", Icon::Truss, "Bậc tự do W, bậc siêu tĩnh, kết luận bất biến hình (lệnh CTHH)")) startCommand("CTHH");
+        endPanel("Cấu tạo");
         beginPanel();
         if (bigButton("Ổn định", Icon::Buckle, "Tải trọng tới hạn, hệ số chiều dài tính toán μ")) startCommand("ONDINH");
         if (bigButton("Dao động\nriêng", Icon::Modal, "Tần số, chu kỳ, dạng dao động")) startCommand("DAODONG");
@@ -1253,6 +1261,23 @@ void App::startCommand(const std::string& raw) {
     }
     if (is({"TAODAN", "TRUSSGEN"})) {
         showTrussGen = true;
+        return;
+    }
+    if (is({"CTHH", "KINEMATIC"})) {
+        kin = kinematicAnalysis(model);
+        kinVersion = modelVersion;
+        showKinematics = true;
+        if (kin.applicable) {
+            echo("W = " + std::to_string(kin.W) + ", " + kin.verdict);
+            if (!kin.mechanismU.empty()) showMechanism();
+        } else echo(kin.note);
+        return;
+    }
+    if (is({"PDELTA"})) {
+        snapshot();
+        model.secondOrder = !model.secondOrder;
+        echo(model.secondOrder ? "Bật tính theo sơ đồ biến dạng (P-Δ)." : "Tắt tính theo sơ đồ biến dạng.");
+        changed();
         return;
     }
     if (is({"ONDINH", "BUCKLING"})) {

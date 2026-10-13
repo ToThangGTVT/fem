@@ -8,6 +8,7 @@
 
 #include "core/Analysis.h"
 #include "core/Eigen.h"
+#include "core/Kinematics.h"
 #include "core/Model.h"
 #include "core/PostProcess.h"
 #include "Commands.h"
@@ -105,6 +106,11 @@ struct App {
     bool animateMode = true;
     bool showEigenDialog = false;
 
+    // ---- cấu tạo hình học
+    fem::KinematicResult kin;
+    int kinVersion = -1;
+    bool showKinematics = false;
+
     // ---- dòng lệnh kiểu AutoCAD
     std::unique_ptr<Command> cmd;
     std::string cmdLine, lastCommand;
@@ -193,6 +199,8 @@ struct App {
     void trussGenDialog();
     void aboutDialog();
     void eigenDialog();
+    void kinematicsDialog();
+    void showMechanism();
     void runEigen();
     void viewport();
     void shortcuts();

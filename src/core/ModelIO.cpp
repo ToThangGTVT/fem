@@ -74,7 +74,9 @@ std::string modelToText(const Model& m) {
     o << "FEM2D 1\n";
     o << "# Đơn vị: kN, m, °C. Chỉ số đánh từ 1.\n";
     o << "TITLE " << quote(m.title) << "\n";
-    o << "PLANE " << (m.planeMode == PlaneMode::Stress ? "STRESS" : "STRAIN") << "\n\n";
+    o << "PLANE " << (m.planeMode == PlaneMode::Stress ? "STRESS" : "STRAIN") << "\n";
+    if (m.secondOrder) o << "ANALYSIS PDELTA 1\n";
+    o << "\n";
     o << "# MATERIAL tên E nu alpha gamma\n";
     for (const auto& x : m.materials)
         o << "MATERIAL " << quote(x.name) << " " << num(x.E) << " " << num(x.nu) << " " << num(x.alpha) << " "
@@ -84,7 +86,7 @@ std::string modelToText(const Model& m) {
         o << "SECTION " << quote(x.name) << " " << num(x.A) << " " << num(x.I) << " " << num(x.h) << "\n";
     o << "\n# NODE x y\n";
     for (const auto& n : m.nodes) o << "NODE " << num(n.x) << " " << num(n.y) << "\n";
-    o << "\n# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im\n";
+    o << "\n# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf [kG chỉ_nén] | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im\n";
     for (const auto& e : m.elements) {
         switch (e.type) {
         case ElemType::Truss:
@@ -92,7 +94,9 @@ std::string modelToText(const Model& m) {
             break;
         case ElemType::Frame:
             o << "FRAME " << e.n[0] + 1 << " " << e.n[1] + 1 << " " << e.mat + 1 << " " << e.sec + 1 << " "
-              << (int)e.hingeI << " " << (int)e.hingeJ << " " << num(e.kf) << "\n";
+              << (int)e.hingeI << " " << (int)e.hingeJ << " " << num(e.kf);
+            if (e.kG != 0 || e.kfCompOnly) o << " " << num(e.kG) << " " << (int)e.kfCompOnly;
+            o << "\n";
             break;
         case ElemType::Tri3:
             o << "TRI3 " << e.n[0] + 1 << " " << e.n[1] + 1 << " " << e.n[2] + 1 << " " << e.mat + 1 << " " << num(e.t)
@@ -108,7 +112,7 @@ std::string modelToText(const Model& m) {
     for (const auto& s : m.supports)
         o << "SUPPORT " << s.node + 1 << " " << (int)s.fix[0] << " " << (int)s.fix[1] << " " << (int)s.fix[2] << " "
           << num(s.k[0]) << " " << num(s.k[1]) << " " << num(s.k[2]) << "\n";
-    o << "\n# LOADCASE tên hệ_số_TLBT loại(0 thường xuyên, 1 tạm thời) nhóm_loại_trừ γf\n#   NLOAD nút Fx Fy Mz\n#   ELOAD pt DIST hướng q1 q2 chiếu | POINT hướng P a | MOMENT M a | TEMP t Δt\n"
+    o << "\n# LOADCASE tên hệ_số_TLBT loại(0 thường xuyên, 1 tạm thời) nhóm_loại_trừ γf\n#   NLOAD nút Fx Fy Mz\n#   ELOAD pt DIST hướng q1 q2 chiếu | POINT hướng P a | MOMENT M a | TEMP t Δt | FIT ΔL\n"
          "#   DISP nút UX|UY|RZ giá_trị   (hướng: LX LY GX GY)\n";
     for (const auto& lc : m.cases) {
         o << "LOADCASE " << quote(lc.name) << " " << num(lc.selfWeight) << " " << lc.kind << " " << lc.group << " "
@@ -124,6 +128,7 @@ std::string modelToText(const Model& m) {
             case ElemLoadKind::Point: o << "POINT " << dirToken(l.dir) << " " << num(l.q1) << " " << num(l.a); break;
             case ElemLoadKind::Moment: o << "MOMENT " << num(l.q1) << " " << num(l.a); break;
             case ElemLoadKind::Temperature: o << "TEMP " << num(l.q1) << " " << num(l.q2); break;
+            case ElemLoadKind::LackOfFit: o << "FIT " << num(l.q1); break;
             }
             o << "\n";
         }
@@ -160,6 +165,9 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
         if (k == "FEM2D") continue;
         if (k == "TITLE") m.title = t.size() > 1 ? t[1] : "";
         else if (k == "PLANE") m.planeMode = (t.size() > 1 && t[1] == "STRAIN") ? PlaneMode::Strain : PlaneMode::Stress;
+        else if (k == "ANALYSIS") {
+            if (t.size() > 2 && t[1] == "PDELTA") m.secondOrder = d(2) != 0;
+        }
         else if (k == "MATERIAL") {
             if (!need(4)) return fail("MATERIAL thiếu tham số");
             Material x;
@@ -191,6 +199,8 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
             e.hingeI = d(5) != 0;
             e.hingeJ = d(6) != 0;
             e.kf = d(7);
+            e.kG = d(8);
+            e.kfCompOnly = d(9) != 0;
             m.elements.push_back(e);
         } else if (k == "TRI3") {
             if (!need(6)) return fail("TRI3 thiếu tham số");
@@ -259,6 +269,9 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
                     l.kind = ElemLoadKind::Moment;
                     l.q1 = d(3);
                     l.a = d(4);
+                } else if (kind == "FIT") {
+                    l.kind = ElemLoadKind::LackOfFit;
+                    l.q1 = d(3);
                 } else if (kind == "TEMP") {
                     l.kind = ElemLoadKind::Temperature;
                     l.q1 = d(3);

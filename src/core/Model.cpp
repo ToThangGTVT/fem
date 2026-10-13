@@ -265,6 +265,7 @@ const char* loadKindName(ElemLoadKind k) {
     case ElemLoadKind::Point: return "Tập trung";
     case ElemLoadKind::Moment: return "Mômen";
     case ElemLoadKind::Temperature: return "Nhiệt độ";
+    case ElemLoadKind::LackOfFit: return "Chế tạo ΔL";
     }
     return "?";
 }

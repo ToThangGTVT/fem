@@ -387,6 +387,7 @@ void App::frame() {
     if (showTrussGen) trussGenDialog();
     if (showAbout) aboutDialog();
     if (showEigenDialog) eigenDialog();
+    if (showKinematics) kinematicsDialog();
     if (showDemo) ImGui::ShowDemoWindow(&showDemo);
     savePrompt();
     clampIndices();

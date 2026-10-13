@@ -16,7 +16,7 @@ NODE 12 0
 NODE 14 0
 NODE 20 0
 
-# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im
+# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf [kG chỉ_nén] | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im
 FRAME 1 2 1 1 0 0 0
 FRAME 2 3 1 1 0 1 0
 FRAME 3 4 1 1 0 0 0
@@ -31,7 +31,7 @@ SUPPORT 6 0 1 0 0 0 0
 
 # LOADCASE tên hệ_số_TLBT loại(0 thường xuyên, 1 tạm thời) nhóm_loại_trừ γf
 #   NLOAD nút Fx Fy Mz
-#   ELOAD pt DIST hướng q1 q2 chiếu | POINT hướng P a | MOMENT M a | TEMP t Δt
+#   ELOAD pt DIST hướng q1 q2 chiếu | POINT hướng P a | MOMENT M a | TEMP t Δt | FIT ΔL
 #   DISP nút UX|UY|RZ giá_trị   (hướng: LX LY GX GY)
 LOADCASE "Tải trọng" 0 0 0 1
   ELOAD 1 DIST GY -10 -10 0

@@ -23,6 +23,7 @@ add_library(femcore STATIC
   src/core/Examples.cpp
   src/core/PostProcess.cpp
   src/core/Eigen.cpp
+  src/core/Kinematics.cpp
 )
 target_include_directories(femcore PUBLIC src)
 if(MSVC)

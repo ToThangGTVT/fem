@@ -18,7 +18,7 @@ const char* contourFieldName(ContourField f);
 
 namespace {
 
-const char* kKinds[] = {"Phân bố", "Tập trung", "Mômen", "Nhiệt độ"};
+const char* kKinds[] = {"Phân bố", "Tập trung", "Mômen", "Nhiệt độ", "Chế tạo ΔL"};
 const char* kDirs[] = {"x cục bộ", "y cục bộ", "X tổng thể", "Y tổng thể"};
 const char* kDofs[] = {"ux", "uy", "φz"};
 
@@ -169,6 +169,9 @@ void App::modelPanel() {
             for (auto& e : m.elements) (e.isBar() ? nb : np)++;
             ImGui::Text("Nút: %zu   Thanh: %d   Phần tử phẳng: %d", m.nodes.size(), nb, np);
             ImGui::Text("Gối: %zu   Trường hợp tải: %zu   Tổ hợp: %zu", m.supports.size(), m.cases.size(), m.combos.size());
+            ImGui::SeparatorText("Phân tích");
+            editB(*this, "Tính theo sơ đồ biến dạng (P-Δ)", m.secondOrder);
+            help("Phân tích bậc hai: kể ảnh hưởng của lực dọc lên độ cứng (P-Δ, P-δ), lặp đến khi hội tụ. Nên chia cột thành vài đoạn.");
             if (result.ok) ImGui::Text("Số phương trình: %d (profile %lld)", result.numEquations, result.profileSize);
             ImGui::EndTabItem();
         }
@@ -604,7 +607,7 @@ void App::modelPanel() {
                     ImGui::TableNextColumn();
                     ImGui::SetNextItemWidth(-FLT_MIN);
                     int out;
-                    if (editEnum(*this, "##k", (int)l.kind, kKinds, 4, out)) {
+                    if (editEnum(*this, "##k", (int)l.kind, kKinds, 5, out)) {
                         l.kind = (ElemLoadKind)out;
                         changed();
                     }
@@ -941,14 +944,26 @@ void App::propsPanel() {
             }
             trackEdit();
             help("Hệ số nền (kN/m³) nhân bề rộng đáy dầm (m). Nên chia dầm thành nhiều đoạn (≥ 10) để kết quả chính xác.");
+            double kG = f.kG;
+            ImGui::SetNextItemWidth(110);
+            if (ImGui::InputDouble("Nền Pasternak kG·b (kN)", &kG, 0, 0, "%.4g")) {
+                for (int e : bars) m.elements[e].kG = std::max(0.0, kG);
+                needAnalyze = dirty = true;
+            }
+            trackEdit();
+            help("Hệ số thứ hai của nền (mô hình hai hệ số Pasternak / Власов): lớp trượt nối các lò xo Winkler. Đặt 0 để dùng nền Winkler.");
+            bool comp = f.kfCompOnly;
+            if (editB(*this, "Nền chỉ chịu nén", comp))
+                for (int e : bars) m.elements[e].kfCompOnly = comp;
+            help("Đoạn thanh bị nâng lên khỏi nền thì nền không làm việc (phân tích lặp). Nền nằm phía −y cục bộ, tức phía dưới khi thanh vẽ từ trái sang phải.");
         }
 
         ImGui::SeparatorText(("Tải trên thanh — " + lc.name).c_str());
         static int kind = 0, dir = 3;
-        static double q1 = -10, q2 = -10, P = -20, a = 1, ratio = 0.5, M0 = 10, t0 = 20, dt = 10;
+        static double q1 = -10, q2 = -10, P = -20, a = 1, ratio = 0.5, M0 = 10, t0 = 20, dt = 10, dL = 0.001;
         static bool proj = false, useRatio = true;
         ImGui::SetNextItemWidth(110);
-        ImGui::Combo("Loại##ld", &kind, kKinds, 4);
+        ImGui::Combo("Loại##ld", &kind, kKinds, 5);
         if (kind <= 1) {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(110);
@@ -982,6 +997,11 @@ void App::propsPanel() {
             ImGui::SetNextItemWidth(80);
             ImGui::InputDouble("Δt = t dưới − t trên", &dt, 0, 0, "%.3g");
             break;
+        case 4:
+            ImGui::SetNextItemWidth(100);
+            ImGui::InputDouble("ΔL (m)", &dL, 0, 0, "%.4g");
+            help("Sai số chế tạo: thanh dài hơn (ΔL > 0) hoặc ngắn hơn (ΔL < 0) so với thiết kế. Hệ siêu tĩnh sẽ phát sinh nội lực.");
+            break;
         }
         if (ImGui::Button("Thêm tải cho thanh chọn")) {
             snapshot();
@@ -1006,6 +1026,7 @@ void App::propsPanel() {
                     l.q1 = t0;
                     l.q2 = dt;
                     break;
+                case 4: l.q1 = dL; break;
                 }
                 lc.elem.push_back(l);
             }
@@ -1061,6 +1082,7 @@ void App::propsPanel() {
                             break;
                         case ElemLoadKind::Moment: l.a = L - l.a; break;
                         case ElemLoadKind::Temperature: l.q2 = -l.q2; break;
+                        case ElemLoadKind::LackOfFit: break; // ΔL không phụ thuộc chiều thanh
                         }
                     }
             }
@@ -1811,6 +1833,11 @@ void App::eigenDialog() {
         ImGui::End();
         return;
     }
+    if (eig.kind == EigenKind::Mechanism) {
+        ImGui::TextWrapped("Đang hiển thị dạng biến hình từ phân tích cấu tạo hình học. Bấm Tính để chạy phân tích trị riêng.");
+        ImGui::End();
+        return;
+    }
     for (const auto& w : eig.warnings) ImGui::TextDisabled("⚠ %s", w.c_str());
     ImGui::Text("%d phương trình, %.0f ms", eig.numEquations, eig.timeMs);
     const bool buck = eig.kind == EigenKind::Buckling;
@@ -1877,6 +1904,70 @@ void App::eigenDialog() {
             ImGui::EndTable();
         }
     }
+    ImGui::End();
+}
+
+// ============================================================================ cấu tạo hình học
+void App::showMechanism() {
+    if (kin.mechanismU.empty()) return;
+    eig = EigenResult{};
+    eig.ok = true;
+    eig.kind = EigenKind::Mechanism;
+    eig.sub = model;
+    eig.barChain.assign(model.elements.size(), {});
+    for (size_t e = 0; e < model.elements.size(); ++e)
+        if (model.elements[e].isBar()) eig.barChain[e] = {model.elements[e].n[0], model.elements[e].n[1]};
+    EigenMode md;
+    md.U = kin.mechanismU;
+    double big = 0;
+    for (size_t i = 0; i < md.U.size(); ++i)
+        if (i % 3 != 2) big = std::max(big, std::abs(md.U[i]));
+    if (big > 0)
+        for (double& v : md.U) v /= big;
+    eig.modes.push_back(md);
+    eigVersion = modelVersion;
+    eigMode = 0;
+    view = ResultView::Mode;
+}
+
+void App::kinematicsDialog() {
+    const ImGuiViewport* vp = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(ImVec2(vp->WorkPos.x + vp->WorkSize.x - 520, vp->WorkPos.y + 60), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(470, 0), ImGuiCond_FirstUseEver);
+    if (!ImGui::Begin("Phân tích cấu tạo hình học", &showKinematics)) {
+        ImGui::End();
+        return;
+    }
+    if (kinVersion != modelVersion) {
+        kin = kinematicAnalysis(model);
+        kinVersion = modelVersion;
+    }
+    const KinematicResult& k = kin;
+    if (!k.applicable) {
+        ImGui::TextWrapped("%s", k.note.c_str());
+        ImGui::End();
+        return;
+    }
+    if (!k.note.empty()) ImGui::TextDisabled("%s", k.note.c_str());
+    ImGui::SeparatorText("Công thức Чебышёв");
+    ImGui::Text("W = 3D − 3H − 2K − C₀ = 3·%d − 3·%d − 2·%d − %d = %d", k.disks, k.rigidJoints, k.hinges, k.supports, k.W);
+    ImGui::TextDisabled("D: miếng cứng (thanh), H: mối hàn đơn, K: khớp đơn, C₀: liên kết tựa");
+    ImGui::TextWrapped("%s", k.W > 0 ? "W > 0: hệ thiếu liên kết → biến hình."
+                                     : "W ≤ 0: đủ số liên kết (điều kiện cần); cần xét thêm cách sắp xếp liên kết.");
+    if (k.rank >= 0) {
+        ImGui::SeparatorText("Phân tích ma trận cân bằng");
+        ImGui::Text("Số phương trình cân bằng: %d", k.equations);
+        ImGui::Text("Số ẩn (nội lực đầu thanh + phản lực): %d", k.unknowns);
+        ImGui::Text("Hạng ma trận: %d", k.rank);
+        ImGui::Text("Bậc siêu tĩnh n = %d − %d = %d", k.unknowns, k.rank, k.indeterminacy);
+        ImGui::Text("Bậc tự do biến hình = %d − %d = %d", k.equations, k.rank, k.mechanisms);
+    }
+    ImGui::Separator();
+    const bool bad = k.mechanisms > 0;
+    ImGui::PushStyleColor(ImGuiCol_Text, bad ? IM_COL32(230, 70, 60, 255) : IM_COL32(60, 180, 90, 255));
+    ImGui::TextWrapped("Kết luận: %s", k.verdict.c_str());
+    ImGui::PopStyleColor();
+    if (bad && !k.mechanismU.empty() && ImGui::Button("Xem dạng biến hình")) showMechanism();
     ImGui::End();
 }
 

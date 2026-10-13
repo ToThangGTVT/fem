@@ -23,6 +23,9 @@ struct BarProps {
     bool truss = false;
     bool relI = false, relJ = false; // giải phóng mômen đầu thanh
     bool hasBending = true;          // false: thanh dàn có I = 0 (chỉ chịu kéo nén)
+    double kG = 0;                   // nền Pasternak (kN)
+    bool second = false;             // phân tích bậc hai: thêm độ cứng hình học với lực dọc N2
+    double N2 = 0;
 };
 
 // Tải trên thanh đã quy về hệ trục cục bộ.
@@ -33,9 +36,11 @@ struct BarLoads {
     std::vector<Point> points;
     std::vector<Moment> moments;
     double T = 0;  // độ tăng nhiệt trung bình
-    double dT = 0; // t_dưới − t_trên
+    double dT = 0;   // t_dưới − t_trên
+    double eps0 = 0; // biến dạng ban đầu do sai số chế tạo ΔL/L
     bool empty() const {
-        return qx1 == 0 && qx2 == 0 && qy1 == 0 && qy2 == 0 && points.empty() && moments.empty() && T == 0 && dT == 0;
+        return qx1 == 0 && qx2 == 0 && qy1 == 0 && qy2 == 0 && points.empty() && moments.empty() && T == 0 && dT == 0 &&
+               eps0 == 0;
     }
 };
 
@@ -49,7 +54,8 @@ BarProps barProps(const Model& m, int e);
 void addBarLoad(const BarProps& p, const ElemLoad& l, double factor, BarLoads& out);
 void addBarSelfWeight(const BarProps& p, double weightPerLength, BarLoads& out);
 
-void barLocalStiffness(const BarProps& p, Mat6& K);                    // đầy đủ, chưa giải phóng liên kết
+// đầy đủ, chưa giải phóng liên kết; gồm nền Winkler/Pasternak và độ cứng hình học khi p.second
+void barLocalStiffness(const BarProps& p, Mat6& K);
 void barFixedEndLoads(const BarProps& p, const BarLoads& l, Vec6& f); // tải nút tương đương, hai đầu ngàm
 // Ma trận độ cứng và tải tương đương trong hệ tổng thể, đã kể khớp đầu thanh.
 void barGlobal(const BarProps& p, const BarLoads& l, Mat6& Kg, Vec6& fg);

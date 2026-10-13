@@ -31,7 +31,15 @@ Tùy chọn CMake: `-DFEM_BUILD_GUI=OFF` (chỉ lõi tính + test), `-DFEM_IMGUI
 - Bài toán ứng suất phẳng / biến dạng phẳng.
 
 **Tải trọng**: tải nút (Fx, Fy, Mz); trên thanh: phân bố hình thang (theo trục cục bộ, tổng thể, hoặc trên hình chiếu),
-tập trung, mômen tập trung, nhiệt độ; trọng lượng bản thân; chuyển vị cưỡng bức (lún gối); gối đàn hồi.
+tập trung, mômen tập trung, nhiệt độ, sai số chế tạo ΔL; trọng lượng bản thân; chuyển vị cưỡng bức (lún gối); gối đàn hồi.
+
+**Nền**: Winkler, hai hệ số Pasternak / Власов, nền chỉ chịu nén (phân tích lặp, đoạn dầm vểnh lên tách khỏi nền).
+
+**Phân tích bậc hai** (tính theo sơ đồ biến dạng, P-Δ và P-δ): lặp với ma trận độ cứng hình học đến khi hội tụ,
+báo mất ổn định khi tải vượt tải trọng tới hạn.
+
+**Cấu tạo hình học** (lệnh `CTHH`): W = 3D − 3H − 2K − C₀, hạng ma trận cân bằng, bậc siêu tĩnh, kết luận
+bất biến hình / biến hình / tức thời biến hình và hiển thị dạng chuyển động của cơ cấu.
 Nhiều trường hợp tải và tổ hợp tải tuyến tính.
 
 **Kết quả**: chuyển vị, phản lực, biểu đồ N, Q, M, ứng suất pháp thớ biên N/A ± M/W, hình biến dạng (đường đàn hồi
@@ -80,7 +88,8 @@ Gõ lệnh ở bất cứ đâu, không cần nhấp vào dòng lệnh. **Enter 
 | `DIV`, `GOP` | chia thanh thành n đoạn, gộp nút trùng |
 | `NGAM`, `KHOP`, `DIDONG`, `DIDONGX`, `NGAMTRUOT`, `BOGOI` | gối tựa |
 | `TAINUT`, `TAIPB`, `TAITT`, `MOMEN` | tải nút, tải phân bố, lực tập trung, mômen |
-| `TINH` (F5), `ONDINH`, `DAODONG` | tính tĩnh, ổn định, dao động riêng |
+| `TINH` (F5), `PDELTA`, `CTHH` | tính tĩnh, bật/tắt P-Δ, cấu tạo hình học |
+| `ONDINH`, `DAODONG` | ổn định, dao động riêng |
 | `DI`, `ID`, `LI`, `Z` | đo khoảng cách, tọa độ, liệt kê, zoom (`E` toàn bộ, `W` cửa sổ) |
 | `U`, `REDO` | hoàn tác, làm lại |
 
@@ -121,6 +130,7 @@ src/core/   lõi tính toán, không phụ thuộc giao diện
   Analysis      lắp ghép, đánh số lại RCM, điều kiện biên, giải, hậu xử lý, phát hiện hệ biến hình
   PostProcess   biểu đồ bao, đường ảnh hưởng
   Eigen         ổn định, dao động riêng (Householder + QL cho ma trận đối xứng)
+  Kinematics    phân tích cấu tạo hình học (ma trận cân bằng, hạng, không gian rỗng)
   Mesher        tạo lưới, chia thanh
   Library       vật liệu, thép hình
   ModelIO       đọc/ghi .fem, báo cáo

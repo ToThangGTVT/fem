@@ -616,7 +616,9 @@ void App::viewport() {
                 }
             }
             char b[200];
-            if (eig.kind == EigenKind::Buckling)
+            if (eig.kind == EigenKind::Mechanism)
+                std::snprintf(b, sizeof b, "Dạng biến hình (cơ cấu): các thanh chuyển động như vật rắn, không biến dạng");
+            else if (eig.kind == EigenKind::Buckling)
                 std::snprintf(b, sizeof b, "Dạng mất ổn định %d:  λcr = %.4g  (tải trọng tới hạn = λcr × bộ tải \"%s\")",
                               eigMode + 1, md.lambda,
                               eigOpt.loadSet < (int)result.sets.size() ? result.sets[eigOpt.loadSet].name.c_str() : "");
@@ -795,6 +797,12 @@ void App::viewport() {
                 const ImVec2 p = a + (b - a) * (float)(l.a / Lw);
                 momentArc(dl, p, 14, l.q1 > 0, c, 1.8f);
                 if (showValues) label(dl, p + ImVec2(16, -16), fmtVal(std::abs(l.q1)) + " kNm", c, ImVec2(0, 1));
+                break;
+            }
+            case ElemLoadKind::LackOfFit: {
+                char buf[64];
+                std::snprintf(buf, sizeof buf, "ΔL=%+.3g mm", l.q1 * 1e3);
+                label(dl, (a + b) * 0.5f + locY * 14, buf, c);
                 break;
             }
             case ElemLoadKind::Temperature: {

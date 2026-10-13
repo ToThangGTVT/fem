@@ -83,6 +83,25 @@ double hermiteV(const BarProps& p, const Vec6& uL, double x) {
     return N[0] * uL[1] + N[1] * uL[2] + N[2] * uL[4] + N[3] * uL[5];
 }
 
+// v'(x) theo hàm dạng Hermite
+double hermiteDV(const BarProps& p, const Vec6& uL, double x) {
+    const double L = p.L, xi = x / L;
+    const double d[4] = {(-6 * xi + 6 * xi * xi) / L, 1 - 4 * xi + 3 * xi * xi, (6 * xi - 6 * xi * xi) / L, 3 * xi * xi - 2 * xi};
+    return d[0] * uL[1] + d[1] * uL[2] + d[2] * uL[4] + d[3] * uL[5];
+}
+
+// ma trận dạng N/(30L)[36, 3L, ...] (độ cứng hình học, nền Pasternak) cộng vào các bậc tự do v, φ
+void addGeometric(Mat6& K, double coef, double L) {
+    const int idx[4] = {1, 2, 4, 5};
+    const double g = coef / (30 * L);
+    const double kg[4][4] = {{36, 3 * L, -36, 3 * L},
+                             {3 * L, 4 * L * L, -3 * L, -L * L},
+                             {-36, -3 * L, 36, -3 * L},
+                             {3 * L, -L * L, -3 * L, 4 * L * L}};
+    for (int i = 0; i < 4; ++i)
+        for (int j = 0; j < 4; ++j) K[idx[i]][idx[j]] += g * kg[i][j];
+}
+
 const double kGauss4x[4] = {-0.8611363115940526, -0.3399810435848563, 0.3399810435848563, 0.8611363115940526};
 const double kGauss4w[4] = {0.3478548451374538, 0.6521451548625461, 0.6521451548625461, 0.3478548451374538};
 const double kGauss3x[3] = {-0.7745966692414834, 0.0, 0.7745966692414834};
@@ -119,6 +138,17 @@ void forcesAt(const BarProps& p, const BarLoads& l, const Vec6& fe, const Vec6& 
         Q += I0;
         M += I1;
     }
+    if (p.kG != 0) {
+        // nền Pasternak tác dụng lên đoạn thanh: phân bố kG·v'' và lực tập trung kG·v'(0) ở đầu i
+        // (lực tập trung của lớp trượt triệt tiêu giữa các đoạn kề nhau) → Q += kG·v'(x), M += kG·(v(x) − v(0))
+        Q += p.kG * hermiteDV(p, uL, x);
+        M += p.kG * (hermiteV(p, uL, x) - uL[1]);
+    }
+    if (p.second && p.N2 != 0) {
+        // hiệu ứng P-δ trong thanh: lực dọc nhân độ võng so với dây cung
+        const double chord = uL[1] + (uL[4] - uL[1]) * x / L;
+        M += p.N2 * (hermiteV(p, uL, x) - chord);
+    }
 }
 
 } // namespace
@@ -151,6 +181,7 @@ BarProps barProps(const Model& m, int e) {
         p.relI = el.hingeI;
         p.relJ = el.hingeJ;
         p.kf = el.kf;
+        p.kG = el.kG;
     }
     return p;
 }
@@ -186,6 +217,7 @@ void addBarLoad(const BarProps& p, const ElemLoad& l, double factor, BarLoads& o
         out.T += l.q1 * factor;
         out.dT += l.q2 * factor;
         break;
+    case ElemLoadKind::LackOfFit: out.eps0 += l.q1 * factor / p.L; break;
     }
 }
 
@@ -220,6 +252,19 @@ void barLocalStiffness(const BarProps& p, Mat6& K) {
         for (int i = 0; i < 4; ++i)
             for (int j = 0; j < 4; ++j) K[idx[i]][idx[j]] += f * kw[i][j];
     }
+    if (p.kG > 0) addGeometric(K, p.kG, L); // nền Pasternak: kG ∫ N'ᵀN' dx
+    if (p.second && p.N2 != 0) {
+        if (p.truss) {
+            // thanh dàn: độ cứng hình học kiểu dây căng
+            const double g = p.N2 / L;
+            K[1][1] += g;
+            K[4][4] += g;
+            K[1][4] -= g;
+            K[4][1] -= g;
+        } else {
+            addGeometric(K, p.N2, L);
+        }
+    }
 }
 
 void barFixedEndLoads(const BarProps& p, const BarLoads& l, Vec6& f) {
@@ -249,8 +294,8 @@ void barFixedEndLoads(const BarProps& p, const BarLoads& l, Vec6& f) {
         f[4] += mo.M * (6 * xi - 6 * xi * xi) / L;
         f[5] += mo.M * (3 * xi * xi - 2 * xi);
     }
-    if (l.T != 0) {
-        const double N0 = p.EA * p.alpha * l.T;
+    if (l.T != 0 || l.eps0 != 0) {
+        const double N0 = p.EA * (p.alpha * l.T + l.eps0);
         f[0] -= N0;
         f[3] += N0;
     }
@@ -374,7 +419,7 @@ void barRecover(const BarProps& p, const BarLoads& l, const Vec6& uGlobal, int s
 
     // Chuyển vị dọc thanh: tích phân độ cong κ = M/EI + κ_nhiệt và biến dạng dọc ε = N/EA + αt
     const double kappaT = (p.h > 0) ? p.alpha * l.dT / p.h : 0.0;
-    const double epsT = p.alpha * l.T;
+    const double epsT = p.alpha * l.T + l.eps0;
     double theta = uL[2];
     out.u[0] = uL[0];
     out.v[0] = uL[1];
@@ -508,7 +553,7 @@ void barEigenMatrices(const BarProps& p, double N, double rhoA, Mat6& Kg, Mat6& 
 
 void barFoundationForce(const BarProps& p, const BarResult& r, double& Fx, double& Fy) {
     Fx = Fy = 0;
-    if (p.kf <= 0) return;
+    if (p.kf <= 0) return; // lớp trượt Pasternak không tạo hợp lực (nội lực của nền)
     double fy = 0;
     for (int g = 0; g < 4; ++g) {
         const double s = 0.5 * p.L * (kGauss4x[g] + 1);

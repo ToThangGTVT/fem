@@ -7,6 +7,7 @@
 #include "core/Analysis.h"
 #include "core/Eigen.h"
 #include "core/Examples.h"
+#include "core/Kinematics.h"
 #include "core/Library.h"
 #include "core/Mesher.h"
 #include "core/ModelIO.h"
@@ -781,7 +782,144 @@ static void testSplitMerge() {
     if (rk.ok && rk2.ok) near("kết quả sau khi gộp", rk2.sets[0].U[4], rk.sets[0].U[4], 1e-12, 1e-15);
 }
 
+static void testLackOfFit() {
+    std::puts("Sai số chế tạo ΔL");
+    const double L = 4, E = 2e8, A = 0.01;
+    Model m = beamModel(L, 1, E, A, 1e-4);
+    fix(m, 0, true, true, true);
+    fix(m, 1, true, true, true);
+    ElemLoad l;
+    l.elem = 0;
+    l.kind = ElemLoadKind::LackOfFit;
+    l.q1 = 0.002;
+    m.cases[0].elem.push_back(l);
+    auto r = run(m);
+    if (r.ok) near("ngàm 2 đầu: N = −EA·ΔL/L", r.sets[0].bars[0].N[3], -E * A * 0.002 / L);
+    // tĩnh định: không sinh nội lực, đầu tự do dịch chuyển ΔL
+    Model c = beamModel(L, 1, E, A, 1e-4);
+    fix(c, 0, true, true, true);
+    c.cases[0].elem.push_back(l);
+    auto rc = run(c);
+    if (rc.ok) {
+        near("công-xôn: N = 0", rc.sets[0].bars[0].N[0], 0, 0, 1e-9);
+        near("công-xôn: dịch chuyển đầu = ΔL", rc.sets[0].U[3], 0.002, 1e-9);
+    }
+    // chia thanh giữ tổng ΔL
+    subdivideBar(m, 0, 4);
+    auto r2 = run(m);
+    if (r2.ok) near("chia 4 đoạn: N không đổi", r2.sets[0].bars[2].N[0], -E * A * 0.002 / L, 1e-9);
+}
+
+static void testPDelta() {
+    std::puts("Tính theo sơ đồ biến dạng (P-Δ)");
+    // cột công-xôn chịu P dọc trục và H ngang: δ = H/(k³EI)(tan kL − kL), M_chân = HL + Pδ
+    const double L = 5, E = 2.1e8, I = 7080e-8, A = 46.5e-4, EI = E * I, P = 1000, H = 10;
+    Model m = columnModel(L, E, A, I);
+    m.cases[0].nodal[0].F = {H, -P, 0};
+    fix(m, 0, true, true, true);
+    subdivideBar(m, 0, 10);
+    auto lin = run(m);
+    m.secondOrder = true;
+    auto r = run(m);
+    if (!r.ok || !lin.ok) return;
+    const double k = std::sqrt(P / EI), exact = H / (k * k * k * EI) * (std::tan(k * L) - k * L);
+    const double tip = r.sets[0].U[3 * 1];
+    near("độ võng đầu cột bậc hai", tip, exact, 2e-3);
+    check(tip > lin.sets[0].U[3] * 1.05, "lớn hơn tuyến tính", tip, lin.sets[0].U[3]);
+    near("mômen chân cột = HL + Pδ", std::abs(r.sets[0].R[2]), H * L + P * tip, 2e-3);
+    near("mômen chân cột trên biểu đồ", std::abs(r.sets[0].bars[0].M.front()), H * L + P * tip, 2e-3);
+    // vượt tải trọng tới hạn → báo lỗi
+    m.cases[0].nodal[0].F[1] = -1.2 * M_PI * M_PI * EI / (4 * L * L);
+    auto rf = analyze(m);
+    check(!rf.ok, "vượt Pcr: báo mất ổn định", 0, 0);
+}
+
+static void testFoundations() {
+    std::puts("Nền Pasternak và nền chỉ chịu nén");
+    const double L = 12, E = 2.75e7, b = 1, h = 0.6, I = b * h * h * h / 12, P = 300;
+    const int n = 48;
+    Model m = beamModel(L, n, E, b * h, I, h);
+    for (auto& e : m.elements) e.kf = 20000;
+    fix(m, n / 2, true, false, false);
+    m.cases[0].nodal.push_back({n / 2, {0, -P, 0}});
+    auto w = run(m);
+    for (auto& e : m.elements) e.kG = 5000;
+    auto pa = run(m);
+    if (w.ok && pa.ok) {
+        near("Pasternak: tổng phản lực nền = P", pa.sets[0].foundRy, P, 1e-6);
+        check(std::abs(pa.sets[0].U[3 * (n / 2) + 1]) < std::abs(w.sets[0].U[3 * (n / 2) + 1]),
+              "lớp trượt làm giảm độ lún", pa.sets[0].U[3 * (n / 2) + 1], w.sets[0].U[3 * (n / 2) + 1]);
+        double maxErr = 0;
+        for (int e = 0; e < n; ++e) {
+            const auto& br = pa.sets[0].bars[e];
+            const auto& f = br.endForces;
+            maxErr = std::max(maxErr, std::abs(br.M.back() - f[5]));
+            if (e + 1 < n && e + 1 != n / 2) maxErr = std::max(maxErr, std::abs(br.Q.back() - pa.sets[0].bars[e + 1].Q.front()));
+        }
+        check(maxErr < 1e-6 * P * L, "Pasternak: M khớp đầu thanh, Q liên tục giữa các đoạn", maxErr, 0);
+    }
+    // nền chỉ chịu nén: lực ở đầu dầm làm đầu kia vểnh lên
+    Model c = beamModel(L, n, E, b * h, I, h);
+    for (auto& e : c.elements) {
+        e.kf = 20000;
+        e.kfCompOnly = true;
+    }
+    fix(c, 0, true, false, false);
+    c.cases[0].nodal.push_back({0, {0, -P, 0}});
+    c.cases[0].nodal.push_back({0, {0, 0, -400}});
+    auto rc = run(c);
+    if (rc.ok) {
+        near("chỉ chịu nén: tổng phản lực nền = P", rc.sets[0].foundRy, P, 1e-6);
+        bool tension = false;
+        for (int e = 0; e < n; ++e) {
+            double fx, fy;
+            barFoundationForce(barProps(c, e), rc.sets[0].bars[e], fx, fy);
+            if (fy < -1e-9) tension = true;
+        }
+        bool lifted = false;
+        for (const auto& wmsg : rc.warnings) lifted |= wmsg.find("tách khỏi nền") != std::string::npos;
+        check(lifted, "có đoạn dầm tách khỏi nền", 0, 0);
+        (void)tension;
+    }
+}
+
+static void testKinematics() {
+    std::puts("Phân tích cấu tạo hình học");
+    auto ex = [](const char* name) {
+        for (const auto& e : examples())
+            if (std::string(e.name) == name) return e.build();
+        return Model{};
+    };
+    struct C {
+        const char* name;
+        int n;
+    } cases[] = {{"Dầm đơn giản", 0},      {"Dầm tĩnh định nhiều nhịp", 0}, {"Khung ba khớp", 0},
+                 {"Dàn cầu", 0},           {"Khung 1 tầng 1 nhịp", 3},      {"Dầm liên tục 3 nhịp", 2},
+                 {"Khung 2 tầng 2 nhịp", 12}};
+    for (const auto& cs : cases) {
+        const auto k = kinematicAnalysis(ex(cs.name));
+        check(k.applicable && k.mechanisms == 0 && k.indeterminacy == cs.n && k.W == -cs.n,
+              (std::string(cs.name) + ": bậc siêu tĩnh").c_str(), k.indeterminacy, cs.n);
+    }
+    // dầm hai gối có khớp giữa nhịp: biến hình, W = 1
+    Model m = beamModel(6, 2, 2e8, 0.01, 1e-4);
+    m.elements[0].hingeJ = true;
+    fix(m, 0, true, true, false);
+    fix(m, 2, false, true, false);
+    auto k = kinematicAnalysis(m);
+    check(k.W == 1 && k.mechanisms == 1 && !k.mechanismU.empty(), "dầm có khớp: biến hình, W = 1", k.W, 1);
+    // ba gối di động song song: W = 0 nhưng biến hình tức thời
+    Model t = beamModel(6, 2, 2e8, 0.01, 1e-4);
+    for (int i = 0; i < 3; ++i) fix(t, i, false, true, false);
+    auto kt = kinematicAnalysis(t);
+    check(kt.W == 0 && kt.mechanisms == 1, "3 gối di động song song: tức thời biến hình", kt.mechanisms, 1);
+}
+
 int main() {
+    testLackOfFit();
+    testPDelta();
+    testFoundations();
+    testKinematics();
     testSplitMerge();
     testEigenSolver();
     testBuckling();

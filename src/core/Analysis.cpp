@@ -115,6 +115,38 @@ std::vector<int> rcmOrder(const Model& m) {
     return order;
 }
 
+namespace {
+
+// Ma trận độ cứng tổng thể của phần tử (thanh: theo BarProps hiện hành)
+bool elementMatrix(const Model& m, int e, ElemData& d) {
+    const Element& el = m.elements[e];
+    if (el.isBar()) {
+        Mat6 Kg;
+        Vec6 fg;
+        barGlobal(d.bar, BarLoads{}, Kg, fg);
+        d.K.resize(36);
+        for (int i = 0; i < 6; ++i)
+            for (int j = 0; j < 6; ++j) d.K[i * 6 + j] = Kg[i][j];
+        return true;
+    }
+    const int n = 2 * el.nodeCount();
+    d.K.resize(n * n);
+    if (el.type == ElemType::Tri3) {
+        double K[6][6];
+        if (!tri3Stiffness(d.x, d.y, d.D, el.t, K)) return false;
+        for (int i = 0; i < 6; ++i)
+            for (int j = 0; j < 6; ++j) d.K[i * 6 + j] = K[i][j];
+    } else {
+        double K[8][8];
+        if (!quad4Stiffness(d.x, d.y, d.D, el.t, el.incompatible, K)) return false;
+        for (int i = 0; i < 8; ++i)
+            for (int j = 0; j < 8; ++j) d.K[i * 8 + j] = K[i][j];
+    }
+    return true;
+}
+
+} // namespace
+
 AnalysisResult analyze(const Model& m, int samplesPerBar) {
     const auto t0 = std::chrono::steady_clock::now();
     AnalysisResult res;
@@ -126,9 +158,10 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
         if (std::find(res.warnings.begin(), res.warnings.end(), w) == res.warnings.end()) res.warnings.push_back(w);
     };
 
-    // ---- ma trận độ cứng phần tử
+    // ---- ma trận độ cứng phần tử (trạng thái ban đầu)
     std::vector<ElemData> ed(ne);
     std::vector<char> hasStiff(ndof, 0);
+    bool anyCompOnly = false;
     for (int e = 0; e < ne; ++e) {
         const Element& el = m.elements[e];
         ElemData& d = ed[e];
@@ -141,34 +174,15 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
             d.bar = barProps(m, e);
             for (int k = 0; k < 2; ++k)
                 for (int c = 0; c < 3; ++c) d.dofs.push_back(3 * el.n[k] + c);
-            Mat6 Kg;
-            Vec6 fg;
-            barGlobal(d.bar, BarLoads{}, Kg, fg);
-            d.K.resize(36);
-            for (int i = 0; i < 6; ++i)
-                for (int j = 0; j < 6; ++j) d.K[i * 6 + j] = Kg[i][j];
+            anyCompOnly |= el.type == ElemType::Frame && el.kfCompOnly && (el.kf > 0 || el.kG > 0);
         } else {
             planeD(m.materials[el.mat], m.planeMode, d.D);
             for (int k = 0; k < nc; ++k)
                 for (int c = 0; c < 2; ++c) d.dofs.push_back(3 * el.n[k] + c);
-            const int n = 2 * nc;
-            d.K.resize(n * n);
-            bool ok;
-            if (el.type == ElemType::Tri3) {
-                double K[6][6];
-                ok = tri3Stiffness(d.x, d.y, d.D, el.t, K);
-                for (int i = 0; i < 6; ++i)
-                    for (int j = 0; j < 6; ++j) d.K[i * 6 + j] = K[i][j];
-            } else {
-                double K[8][8];
-                ok = quad4Stiffness(d.x, d.y, d.D, el.t, el.incompatible, K);
-                for (int i = 0; i < 8; ++i)
-                    for (int j = 0; j < 8; ++j) d.K[i * 8 + j] = K[i][j];
-            }
-            if (!ok) {
-                res.error = fmt("Phần tử %d bị suy biến (diện tích bằng 0 hoặc tứ giác lõm/xoắn).", e + 1);
-                return res;
-            }
+        }
+        if (!elementMatrix(m, e, d)) {
+            res.error = fmt("Phần tử %d bị suy biến (diện tích bằng 0 hoặc tứ giác lõm/xoắn).", e + 1);
+            return res;
         }
         const int n = (int)d.dofs.size();
         double kmax = 0;
@@ -176,6 +190,7 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
         for (int i = 0; i < n; ++i)
             if (d.K[i * n + i] > 1e-12 * kmax) hasStiff[d.dofs[i]] = 1;
     }
+    const bool nonlinear = (m.secondOrder && m.hasBars()) || anyCompOnly;
 
     // ---- điều kiện biên
     res.dofState.assign(ndof, DofFree);
@@ -201,14 +216,13 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
         else if (c != RZ) warnOnce(fmt("Nút %d: bậc tự do %s không có độ cứng — đã tự động khóa.", node + 1, dofName(c)));
     }
 
-    // ---- đánh số phương trình theo thứ tự RCM
+    // ---- đánh số phương trình theo thứ tự RCM, profile
     std::vector<int> eq(ndof, -1);
     int neq = 0;
     for (int node : rcmOrder(m))
         for (int c = 0; c < 3; ++c)
             if (res.dofState[3 * node + c] == DofFree) eq[3 * node + c] = neq++;
     res.numEquations = neq;
-
     std::vector<int> first(neq);
     for (int i = 0; i < neq; ++i) first[i] = i;
     for (const auto& d : ed) {
@@ -218,40 +232,53 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
         for (int dof : d.dofs)
             if (eq[dof] >= 0) first[eq[dof]] = std::min(first[eq[dof]], mn);
     }
-    SkylineMatrix K;
-    K.init(first);
-    res.profileSize = K.storage();
 
-    std::vector<Coupling> couplings;
-    for (const auto& d : ed) {
-        const int n = (int)d.dofs.size();
-        for (int a = 0; a < n; ++a) {
-            const int ea = eq[d.dofs[a]];
-            if (ea < 0) continue;
-            for (int b = 0; b < n; ++b) {
-                const double k = d.K[a * n + b];
-                if (k == 0) continue;
-                const int eb = eq[d.dofs[b]];
-                if (eb >= 0) {
-                    if (ea <= eb) K.add(ea, eb, k);
-                } else if (res.dofState[d.dofs[b]] == DofSupport) {
-                    couplings.push_back({ea, d.dofs[b], k});
+    // lắp ghép và phân tích ma trận; trả về phương trình suy biến (−1 nếu thành công)
+    auto assemble = [&](const std::vector<ElemData>& eds, SkylineMatrix& K, std::vector<Coupling>& cpl) {
+        K.init(first);
+        cpl.clear();
+        for (const auto& d : eds) {
+            const int n = (int)d.dofs.size();
+            for (int a = 0; a < n; ++a) {
+                const int ea = eq[d.dofs[a]];
+                if (ea < 0) continue;
+                for (int b = 0; b < n; ++b) {
+                    const double k = d.K[a * n + b];
+                    if (k == 0) continue;
+                    const int eb = eq[d.dofs[b]];
+                    if (eb >= 0) {
+                        if (ea <= eb) K.add(ea, eb, k);
+                    } else if (res.dofState[d.dofs[b]] == DofSupport) {
+                        cpl.push_back({ea, d.dofs[b], k});
+                    }
                 }
             }
         }
-    }
-    for (int d = 0; d < ndof; ++d)
-        if (eq[d] >= 0 && spring[d] > 0) K.add(eq[d], eq[d], spring[d]);
-
-    const int bad = K.factorize();
-    if (bad >= 0) {
+        for (int d = 0; d < ndof; ++d)
+            if (eq[d] >= 0 && spring[d] > 0) K.add(eq[d], eq[d], spring[d]);
+        return K.factorize();
+    };
+    auto mechanismError = [&](int bad, bool unstable) {
         int dof = 0;
         for (int d = 0; d < ndof; ++d)
             if (eq[d] == bad) dof = d;
-        res.error = fmt("Hệ biến hình (không ổn định hình học): ma trận độ cứng suy biến tại nút %d, bậc tự do %s. "
-                        "Hãy kiểm tra liên kết gối tựa, khớp và cách nối các thanh.",
-                        dof / 3 + 1, dofName(dof % 3));
-        return res;
+        if (unstable)
+            return fmt("Mất ổn định trong phân tích bậc hai (tải trọng vượt tải trọng tới hạn) — suy biến tại nút %d, %s.",
+                       dof / 3 + 1, dofName(dof % 3));
+        return fmt("Hệ biến hình (không ổn định hình học): ma trận độ cứng suy biến tại nút %d, bậc tự do %s. "
+                   "Hãy kiểm tra liên kết gối tựa, khớp và cách nối các thanh.",
+                   dof / 3 + 1, dofName(dof % 3));
+    };
+
+    SkylineMatrix Klin;
+    std::vector<Coupling> cplLin;
+    {
+        const int bad = assemble(ed, Klin, cplLin);
+        res.profileSize = Klin.storage();
+        if (bad >= 0) {
+            res.error = mechanismError(bad, false);
+            return res;
+        }
     }
 
     // ---- các bộ tải: trường hợp tải rồi tổ hợp
@@ -264,8 +291,10 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
     for (size_t i = 0; i < m.cases.size(); ++i) defs.push_back({m.cases[i].name, false, {{(int)i, 1.0}}});
     for (const auto& c : m.combos) defs.push_back({c.name, true, c.terms});
 
-    for (const auto& def : defs) {
-        LoadSetResult out;
+    // giải một bộ tải với ma trận K (đã phân tích) và trạng thái phần tử eds
+    auto solveSet = [&](const SetDef& def, const std::vector<ElemData>& eds, const SkylineMatrix& K,
+                        const std::vector<Coupling>& cpl, LoadSetResult& out) {
+        out = LoadSetResult{};
         out.name = def.name;
         out.combo = def.combo;
         std::vector<double> Fdirect(ndof, 0.0), F(ndof, 0.0), up(ndof, 0.0);
@@ -284,7 +313,7 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
                     warnOnce(fmt("Tải trên phần tử phẳng %d chưa được hỗ trợ — đã bỏ qua (hãy dùng tải nút).", l.elem + 1));
                     continue;
                 }
-                addBarLoad(ed[l.elem].bar, l, f, bl[l.elem]);
+                addBarLoad(eds[l.elem].bar, l, f, bl[l.elem]);
             }
             for (const auto& d : lc.disp) {
                 if (d.node < 0 || d.node >= nn || d.dof < 0 || d.dof > 2) continue;
@@ -297,47 +326,44 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
                 up[dof] += f * d.value;
             }
         }
-        // tải tương đương từ phần tử
         std::vector<std::vector<double>> feq(ne);
         for (int e = 0; e < ne; ++e) {
             const Element& el = m.elements[e];
             const Material& mat = m.materials[el.mat];
             if (el.isBar()) {
-                if (sw != 0) addBarSelfWeight(ed[e].bar, sw * mat.gamma * m.sections[el.sec].A, bl[e]);
+                if (sw != 0) addBarSelfWeight(eds[e].bar, sw * mat.gamma * m.sections[el.sec].A, bl[e]);
                 if (bl[e].empty()) continue;
                 Mat6 Kg;
                 Vec6 fg;
-                barGlobal(ed[e].bar, bl[e], Kg, fg);
+                barGlobal(eds[e].bar, bl[e], Kg, fg);
                 feq[e].assign(fg.begin(), fg.end());
             } else if (sw != 0) {
                 const double by = -sw * mat.gamma;
                 if (el.type == ElemType::Tri3) {
                     double f[6];
-                    tri3BodyForce(ed[e].x, ed[e].y, el.t, 0, by, f);
+                    tri3BodyForce(eds[e].x, eds[e].y, el.t, 0, by, f);
                     feq[e].assign(f, f + 6);
                 } else {
                     double f[8];
-                    quad4BodyForce(ed[e].x, ed[e].y, el.t, 0, by, f);
+                    quad4BodyForce(eds[e].x, eds[e].y, el.t, 0, by, f);
                     feq[e].assign(f, f + 8);
                 }
             }
-            for (size_t k = 0; k < feq[e].size(); ++k) F[ed[e].dofs[k]] += feq[e][k];
+            for (size_t k = 0; k < feq[e].size(); ++k) F[eds[e].dofs[k]] += feq[e][k];
         }
         for (int d = 0; d < ndof; ++d) {
             F[d] += Fdirect[d];
             if (d % 3 == UX) out.sumFx += F[d];
             if (d % 3 == UY) out.sumFy += F[d];
         }
-
         std::vector<double> rhs(neq, 0.0);
         for (int d = 0; d < ndof; ++d) {
             if (eq[d] >= 0) rhs[eq[d]] = F[d];
             else if (res.dofState[d] == DofAuto && std::abs(F[d]) > 1e-12)
                 warnOnce(fmt("Tải tại nút %d theo %s bị bỏ qua vì bậc tự do này không có độ cứng.", d / 3 + 1, dofName(d % 3)));
         }
-        for (const auto& c : couplings) rhs[c.eq] -= c.k * up[c.dof];
+        for (const auto& c : cpl) rhs[c.eq] -= c.k * up[c.dof];
         K.solve(rhs);
-
         out.U.assign(ndof, 0.0);
         for (int d = 0; d < ndof; ++d) {
             if (eq[d] >= 0) out.U[d] = rhs[eq[d]];
@@ -345,14 +371,14 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
         }
 
         // ---- nội lực, ứng suất, phản lực
-        std::vector<double> nodeForce(ndof, 0.0); // Σ lực nút tác dụng lên phần tử
+        std::vector<double> nodeForce(ndof, 0.0);
         out.bars.resize(ne);
         out.elemStress.assign(ne, {});
         out.nodeStress.assign(nn, {0, 0, 0, 0});
         out.nodeStressCount.assign(nn, 0);
         for (int e = 0; e < ne; ++e) {
             const Element& el = m.elements[e];
-            const ElemData& d = ed[e];
+            const ElemData& d = eds[e];
             const int n = (int)d.dofs.size();
             std::vector<double> ue(n);
             for (int k = 0; k < n; ++k) ue[k] = out.U[d.dofs[k]];
@@ -395,7 +421,6 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
         for (int i = 0; i < nn; ++i)
             if (out.nodeStressCount[i] > 0)
                 for (auto& v : out.nodeStress[i]) v /= out.nodeStressCount[i];
-
         out.R.assign(ndof, 0.0);
         for (int d = 0; d < ndof; ++d) {
             if (res.dofState[d] == DofSupport) out.R[d] = nodeForce[d] - Fdirect[d];
@@ -405,6 +430,80 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
         }
         out.sumRx += out.foundRx;
         out.sumRy += out.foundRy;
+    };
+
+    for (const auto& def : defs) {
+        LoadSetResult out;
+        if (!nonlinear) {
+            solveSet(def, ed, Klin, cplLin, out);
+            res.sets.push_back(std::move(out));
+            continue;
+        }
+        // ---- lặp: phân tích bậc hai (P-Δ) và/hoặc nền chỉ chịu nén
+        std::vector<ElemData> eds = ed;
+        std::vector<double> N(ne, 0.0);
+        std::vector<char> contact(ne, 1);
+        SkylineMatrix K;
+        std::vector<Coupling> cpl;
+        bool converged = false;
+        const int maxIt = 40;
+        int it = 0;
+        for (; it < maxIt; ++it) {
+            for (int e = 0; e < ne; ++e) {
+                const Element& el = m.elements[e];
+                if (!el.isBar()) continue;
+                BarProps p = ed[e].bar;
+                if (el.kfCompOnly && !contact[e]) p.kf = p.kG = 0;
+                if (m.secondOrder && it > 0) {
+                    p.second = true;
+                    p.N2 = N[e];
+                }
+                eds[e].bar = p;
+                elementMatrix(m, e, eds[e]);
+            }
+            const int bad = it == 0 && !anyCompOnly ? (K = Klin, cpl = cplLin, -1) : assemble(eds, K, cpl);
+            if (bad >= 0) {
+                res.error = mechanismError(bad, m.secondOrder && it > 0);
+                res.sets.clear();
+                return res;
+            }
+            solveSet(def, eds, K, cpl, out);
+            // cập nhật lực dọc và vùng tiếp xúc nền
+            double dN = 0, Nmax = 1e-9;
+            bool contactChanged = false;
+            for (int e = 0; e < ne; ++e) {
+                const Element& el = m.elements[e];
+                if (!el.isBar()) continue;
+                const BarResult& b = out.bars[e];
+                if (b.N.empty()) continue;
+                double nAvg = 0, vAvg = 0;
+                for (double v : b.N) nAvg += v;
+                for (double v : b.v) vAvg += v;
+                nAvg /= b.N.size();
+                vAvg /= b.v.size();
+                dN = std::max(dN, std::abs(nAvg - N[e]));
+                Nmax = std::max(Nmax, std::abs(nAvg));
+                N[e] = nAvg;
+                if (el.kfCompOnly && (el.kf > 0 || el.kG > 0)) {
+                    const char c = vAvg <= 0; // thanh ép xuống nền (phía −y cục bộ)
+                    if (c != contact[e]) contactChanged = true;
+                    contact[e] = c;
+                }
+            }
+            const bool nOk = !m.secondOrder || (it > 0 && dN <= 1e-7 * Nmax);
+            if (nOk && !contactChanged && (it > 0 || !m.secondOrder)) {
+                converged = true;
+                break;
+            }
+        }
+        if (!converged)
+            warnOnce(fmt("Bộ tải \"%s\": vòng lặp phi tuyến chưa hội tụ sau %d bước.", def.name.c_str(), maxIt));
+        if (anyCompOnly) {
+            int lost = 0;
+            for (int e = 0; e < ne; ++e)
+                if (m.elements[e].kfCompOnly && !contact[e]) ++lost;
+            if (lost) warnOnce(fmt("Bộ tải \"%s\": %d đoạn thanh tách khỏi nền (nền chỉ chịu nén).", def.name.c_str(), lost));
+        }
         res.sets.push_back(std::move(out));
     }
 

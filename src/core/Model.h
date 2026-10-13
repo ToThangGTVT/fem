@@ -42,6 +42,8 @@ struct Element {
     bool hingeI = false;      // khớp tại đầu i (giải phóng mômen)
     bool hingeJ = false;      // khớp tại đầu j
     double kf = 0;            // hệ số nền Winkler × bề rộng, kN/m² (dầm trên nền đàn hồi)
+    double kG = 0;            // hệ số trượt của nền Pasternak × bề rộng, kN (mô hình nền hai hệ số)
+    bool kfCompOnly = false;  // nền chỉ chịu nén (tách khỏi nền khi thanh bị nâng lên, phía −y cục bộ là nền)
     bool incompatible = true; // Quad4: dùng mode không tương thích (Wilson/Taylor QM6)
 
     int nodeCount() const {
@@ -69,7 +71,7 @@ struct NodalLoad {
     std::array<double, 3> F{0, 0, 0}; // Fx, Fy (kN), Mz (kNm)
 };
 
-enum class ElemLoadKind { Distributed, Point, Moment, Temperature };
+enum class ElemLoadKind { Distributed, Point, Moment, Temperature, LackOfFit };
 enum class LoadDir { LocalX, LocalY, GlobalX, GlobalY };
 
 struct ElemLoad {
@@ -80,6 +82,7 @@ struct ElemLoad {
     // Point:       q1 = P (kN), a = khoảng cách từ đầu i (m)
     // Moment:      q1 = M (kNm, ngược chiều kim đồng hồ dương), a = khoảng cách từ đầu i
     // Temperature: q1 = độ tăng nhiệt trung bình t (°C), q2 = t_dưới − t_trên (°C)
+    // LackOfFit:   q1 = sai số chế tạo ΔL (m), dương: thanh dài hơn thiết kế
     double q1 = 0, q2 = 0;
     double a = 0;
     bool projected = false; // tải phân bố theo phương tổng thể tính trên chiều dài hình chiếu
@@ -115,6 +118,7 @@ struct Combo {
 struct Model {
     std::string title;
     PlaneMode planeMode = PlaneMode::Stress;
+    bool secondOrder = false; // tính theo sơ đồ biến dạng (P-Δ, phân tích bậc hai)
     std::vector<Node> nodes;
     std::vector<Material> materials;
     std::vector<Section> sections;
