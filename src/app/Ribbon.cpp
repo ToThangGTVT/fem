@@ -6,6 +6,7 @@
 
 #include "App.h"
 #include "Commands.h"
+#include "SvgIcon.h"
 #include "core/Examples.h"
 #include "core/Mesher.h"
 #include "imgui_internal.h"
@@ -371,39 +372,14 @@ void drawIcon(ImDrawList* dl, Icon ic, ImVec2 c, float s, const IconColors& k) {
         line(-0.8f, 0.3f, 0.8f, 0.3f, k.fg, th * 0.7f);
         line(-0.15f, -0.8f, -0.15f, 0.8f, k.fg, th * 0.7f);
         break;
-    case Icon::New:
-        dl->AddRect(P(-0.55f, -0.8f), P(0.55f, 0.8f), k.fg, 0, 0, th);
-        line(0.15f, -0.8f, 0.55f, -0.4f, k.fg);
-        break;
-    case Icon::Open:
-        dl->AddRect(P(-0.8f, -0.45f), P(0.8f, 0.7f), k.orange, 0.08f * h, 0, th);
-        line(-0.8f, -0.45f, -0.35f, -0.7f, k.orange);
-        line(-0.35f, -0.7f, 0.1f, -0.45f, k.orange);
-        break;
-    case Icon::Save:
-        dl->AddRect(P(-0.7f, -0.7f), P(0.7f, 0.7f), k.blue, 0.08f * h, 0, th);
-        dl->AddRectFilled(P(-0.4f, -0.7f), P(0.4f, -0.2f), k.blue);
-        dl->AddRect(P(-0.4f, 0.15f), P(0.4f, 0.7f), k.blue, 0, 0, th);
-        break;
-    case Icon::Undo:
-    case Icon::Redo: {
-        const float sg = ic == Icon::Undo ? 1.f : -1.f;
-        dl->PathArcTo(P(0, 0.15f), 0.55f * h, sg > 0 ? 1.1f * kPi : -0.1f * kPi, sg > 0 ? 2.05f * kPi : -1.05f * kPi, 16);
-        dl->PathStroke(k.fg, 0, th);
-        arrowHead(dl, P(-0.55f * sg, 0.12f), ImVec2(0, 1), 0.38f * h, k.fg);
-        break;
-    }
-    case Icon::Sun:
-        dl->AddCircleFilled(P(0, 0), 0.35f * h, k.orange);
-        for (int i = 0; i < 8; ++i) {
-            const float a = i * kPi / 4;
-            line(0.5f * std::cos(a), 0.5f * std::sin(a), 0.8f * std::cos(a), 0.8f * std::sin(a), k.orange);
-        }
-        break;
-    case Icon::Moon:
-        dl->AddCircleFilled(P(0, 0), 0.6f * h, k.fg);
-        dl->AddCircleFilled(P(0.3f, -0.25f), 0.5f * h, ImGui::GetColorU32(ImGuiCol_MenuBarBg));
-        break;
+    // biểu tượng thao tác tệp, hoàn tác, giao diện: bộ Lucide (SvgIcon.cpp)
+    case Icon::New: drawSvgIcon(dl, SvgIconId::FilePlus, c, s, k.fg); break;
+    case Icon::Open: drawSvgIcon(dl, SvgIconId::FolderOpen, c, s, k.orange); break;
+    case Icon::Save: drawSvgIcon(dl, SvgIconId::Save, c, s, k.blue); break;
+    case Icon::Undo: drawSvgIcon(dl, SvgIconId::Undo, c, s, k.fg); break;
+    case Icon::Redo: drawSvgIcon(dl, SvgIconId::Redo, c, s, k.fg); break;
+    case Icon::Sun: drawSvgIcon(dl, SvgIconId::Sun, c, s, k.orange); break;
+    case Icon::Moon: drawSvgIcon(dl, SvgIconId::Moon, c, s, k.fg); break;
     case Icon::Help: text("?", 0, 0, k.blue, 0.9f); break;
     }
 }
