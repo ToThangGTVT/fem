@@ -4,6 +4,8 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
+#include <vector>
 #include <string>
 
 #include "App.h"
@@ -13,27 +15,10 @@
 #include "imgui_impl_sdlrenderer3.h"
 
 static void setupStyle(float scale) {
-    ImGui::StyleColorsLight();
     ImGuiStyle& s = ImGui::GetStyle();
-    s.WindowRounding = 4;
-    s.FrameRounding = 3;
-    s.GrabRounding = 3;
-    s.TabRounding = 3;
     s.FramePadding = ImVec2(6, 3);
     s.ItemSpacing = ImVec2(7, 5);
     s.WindowBorderSize = 1;
-    s.FrameBorderSize = 1;
-    ImVec4* c = s.Colors;
-    c[ImGuiCol_WindowBg] = ImVec4(0.96f, 0.96f, 0.97f, 1);
-    c[ImGuiCol_ChildBg] = ImVec4(1, 1, 1, 0);
-    c[ImGuiCol_Header] = ImVec4(0.26f, 0.47f, 0.80f, 0.22f);
-    c[ImGuiCol_HeaderHovered] = ImVec4(0.26f, 0.47f, 0.80f, 0.35f);
-    c[ImGuiCol_HeaderActive] = ImVec4(0.26f, 0.47f, 0.80f, 0.50f);
-    c[ImGuiCol_Button] = ImVec4(0.88f, 0.90f, 0.93f, 1);
-    c[ImGuiCol_ButtonHovered] = ImVec4(0.26f, 0.47f, 0.80f, 0.35f);
-    c[ImGuiCol_ButtonActive] = ImVec4(0.26f, 0.47f, 0.80f, 0.60f);
-    c[ImGuiCol_TitleBgActive] = ImVec4(0.80f, 0.85f, 0.93f, 1);
-    c[ImGuiCol_Border] = ImVec4(0, 0, 0, 0.18f);
     s.ScaleAllSizes(scale);
     s.FontScaleDpi = scale;
 }
@@ -102,8 +87,9 @@ int main(int argc, char** argv) {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard | ImGuiConfigFlags_DockingEnable;
-    io.IniFilename = "fem2d_layout.ini";
+    // không bật điều hướng bàn phím: phím gõ được chuyển vào dòng lệnh (kiểu AutoCAD)
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.IniFilename = "fem2d_layout_v2.ini"; // v2: bố cục kiểu AutoCAD
     setupStyle(scale);
     ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
@@ -111,12 +97,15 @@ int main(int argc, char** argv) {
 
     App app;
     app.window = window;
+    app.applyTheme();
     // --shot <ảnh.bmp> <số ví dụ> <chế độ xem 0..6> [đại lượng màu 0..8]: chụp màn hình rồi thoát
     std::string shotPath;
     int shotFrames = 0;
-    // --smoke: giả lập chuột vẽ khung cổng bằng công cụ "Thanh khung", gán gối, rồi in kết quả
+    // --smoke: thao tác như người dùng qua dòng lệnh và chuột, kiểm tra kết quả rồi thoát
     bool smoke = false;
     int smokeFrame = 0;
+    std::vector<std::function<void()>> script;
+    ImVec2 smokeMouse(-1, -1); // vị trí chuột giả lập, gửi lại mỗi khung hình
     if (argc > 2 && std::string(argv[1]) == "--shot") {
         shotPath = argv[2];
         app.loadExample(argc > 3 ? std::atoi(argv[3]) : 0);
@@ -126,6 +115,10 @@ int main(int argc, char** argv) {
             // cờ: e = biểu đồ bao; m<thanh>:<x> = đah M tại tiết diện; q<thanh>:<x> = đah Q
             const std::string f = argv[6];
             app.showEnvelope = f.find('e') != std::string::npos;
+            if (f.find('l') != std::string::npos) {
+                app.darkTheme = false;
+                app.applyTheme();
+            }
             if (f[0] == 'b' || f[0] == 'v') {
                 app.eigOpt.kind = f[0] == 'b' ? fem::EigenKind::Buckling : fem::EigenKind::Vibration;
                 app.eigMode = 0;
@@ -146,7 +139,80 @@ int main(int argc, char** argv) {
     } else if (argc > 1 && std::string(argv[1]) == "--smoke") {
         smoke = true;
         io.IniFilename = nullptr;
+        io.ConfigInputTrickleEventQueue = false;
         app.newModel();
+        app.cancelCommand();
+        auto wait = [&](int n) {
+            for (int i = 0; i < n; ++i) script.push_back([] {});
+        };
+        auto at = [&app](double x, double y) { return app.cam.toScreen(x, y); };
+        auto type = [&](const char* t) {
+            script.push_back([&io, t] { io.AddInputCharactersUTF8(t); });
+            script.push_back([&io] { io.AddKeyEvent(ImGuiKey_Enter, true); });
+            script.push_back([&io] { io.AddKeyEvent(ImGuiKey_Enter, false); });
+        };
+        auto click = [&](double x, double y) {
+            script.push_back([&smokeMouse, at, x, y] { smokeMouse = at(x, y); });
+            script.push_back([&io] { io.AddMouseButtonEvent(0, true); });
+            script.push_back([&io] { io.AddMouseButtonEvent(0, false); });
+        };
+        auto drag = [&](double x0, double y0, double x1, double y1) {
+            script.push_back([&smokeMouse, at, x0, y0] { smokeMouse = at(x0, y0); });
+            script.push_back([&io] { io.AddMouseButtonEvent(0, true); });
+            script.push_back([&smokeMouse, at, x1, y1] { smokeMouse = at(x1, y1); });
+            script.push_back([&io] { io.AddMouseButtonEvent(0, false); });
+        };
+        auto check = [&](const char* what, std::function<bool()> f) {
+            script.push_back([what, f] { std::printf("smoke: %-58s %s\n", what, f() ? "OK" : "LỖI"); });
+        };
+        wait(4);
+        script.push_back([&app] {
+            app.fitRequested = false;
+            app.fitFrames = 0;
+            app.cam.cx = 3;
+            app.cam.cy = 2;
+            app.cam.scale = 50;
+        });
+        wait(2);
+        type("L");
+        click(0, 0);
+        click(0, 4);
+        click(6, 4);
+        click(6, 0);
+        type(""); // Enter: kết thúc lệnh
+        check("vẽ khung bằng lệnh L: 4 nút, 3 thanh", [&app] { return app.model.nodes.size() == 4 && app.model.elements.size() == 3; });
+        type("L");
+        click(3.02, 4.03); // OSNAP trung điểm dầm
+        type("@0,-3");     // tọa độ tương đối
+        type("");
+        check("nối vào trung điểm dầm (cắt dầm): 6 nút, 5 thanh", [&app] { return app.model.nodes.size() == 6 && app.model.elements.size() == 5; });
+        drag(-0.5, -0.5, 6.5, 0.5); // chọn cửa sổ trái→phải: 2 nút chân cột
+        check("chọn cửa sổ: 2 nút, 0 thanh", [&app] { return app.selNodes.size() == 2 && app.selElems.empty(); });
+        type("NGAM");
+        check("NGAM với tập chọn sẵn: 2 gối ngàm", [&app] { return app.model.supports.size() == 2 && app.model.supports[0].fix[2]; });
+        click(1.5, 4);
+        click(4.5, 4);
+        type("TAIPB");
+        type("-10");
+        type(""); // hướng mặc định GY
+        check("TAIPB -10 trên 2 nửa dầm", [&app] { return app.model.cases[0].elem.size() == 2; });
+        drag(5.8, 3.7, 0.2, 4.3); // cắt ngang phải→trái: 2 nửa dầm + cột giữa + nút giữa
+        check("chọn cắt ngang: 3 thanh", [&app] { return app.selElems.size() == 3; });
+        script.push_back([&app] {
+            app.selNodes.clear();
+            app.selElems.clear();
+            app.analyzeNow();
+        });
+        check("tính: ΣRy = 60 kN", [&app] { return app.result.ok && std::abs(app.result.sets[0].sumRy - 60) < 1e-9; });
+        type("Z");
+        type("E");
+        script.push_back([&app] { app.undo(); });
+        check("hoàn tác bỏ tải", [&app] { return app.model.cases[0].elem.empty(); });
+        script.push_back([&app] {
+            if (std::getenv("FEM_SMOKE_LOG"))
+                for (const auto& l : app.log) std::printf("  | %s\n", l.c_str());
+            app.quitNow = true;
+        });
     } else if (argc > 1) {
         app.openFile(argv[1]);
     } else {
@@ -171,51 +237,14 @@ int main(int argc, char** argv) {
         if (app.quitNow) done = true;
         SDL_SetWindowTitle(window, app.windowTitle().c_str());
 
-        if (smoke) {
-            const double pts[4][2] = {{0, 0}, {0, 4}, {6, 4}, {6, 0}};
-            const int k = smokeFrame / 4, ph = smokeFrame % 4;
-            if (smokeFrame == 3) app.fitRequested = false;
-            if (k >= 1 && k <= 4) {
-                const ImVec2 p = app.cam.toScreen(pts[k - 1][0], pts[k - 1][1]);
-                if (ph == 0) io.AddMousePosEvent(p.x, p.y);
-                if (ph == 1) io.AddMouseButtonEvent(0, true);
-                if (ph == 2) io.AddMouseButtonEvent(0, false);
-            } else if (k == 5) {
-                if (ph == 0) {
-                    app.tool = Tool::Select;
-                    const ImVec2 a = app.cam.toScreen(-0.5, -0.5);
-                    io.AddMousePosEvent(a.x, a.y);
-                }
-                if (ph == 1) io.AddMouseButtonEvent(0, true);
-                if (ph == 2) {
-                    const ImVec2 b = app.cam.toScreen(6.5, 0.5); // kéo khung chọn 2 nút chân cột
-                    io.AddMousePosEvent(b.x, b.y);
-                }
-                if (ph == 3) io.AddMouseButtonEvent(0, false);
-            } else if (k == 6 && ph == 0) {
-                app.snapshot();
-                for (int n : app.selNodes) app.model.supportFor(n).fix = {true, true, true};
-                fem::ElemLoad l;
-                l.elem = 1;
-                l.q1 = l.q2 = -10;
-                app.model.cases[0].elem.push_back(l);
-                app.changed();
-            } else if (k == 7) {
-                app.analyzeNow();
-                std::printf("smoke: nút %zu, phần tử %zu, chọn %zu nút, gối %zu, tính %s, ΣRy = %.3f\n",
-                            app.model.nodes.size(), app.model.elements.size(), app.selNodes.size(),
-                            app.model.supports.size(), app.result.ok ? "OK" : app.result.error.c_str(),
-                            app.result.ok ? app.result.sets[0].sumRy : 0.0);
-                app.undo();
-                app.analyzeNow();
-                std::printf("smoke: sau hoàn tác: gối %zu, tải %zu\n", app.model.supports.size(),
-                            app.model.cases[0].elem.size());
-                done = true;
-            }
-            ++smokeFrame;
-        }
+        // luôn nhận ký tự để gõ lệnh ở bất cứ đâu (backend ImGui tắt text input khi không có ô nhập)
+        if (!SDL_TextInputActive(window)) SDL_StartTextInput(window);
         ImGui_ImplSDLRenderer3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
+        // giả lập sau backend để vị trí chuột thật không ghi đè sự kiện giả lập
+        if (smoke && smokeMouse.x >= 0) io.AddMousePosEvent(smokeMouse.x, smokeMouse.y);
+        if (smoke && smokeFrame < (int)script.size()) script[smokeFrame++]();
+        if (smoke && smokeMouse.x >= 0) io.AddMousePosEvent(smokeMouse.x, smokeMouse.y);
         ImGui::NewFrame();
         app.frame();
         ImGui::Render();

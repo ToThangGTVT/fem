@@ -1,5 +1,6 @@
 // Trạng thái ứng dụng và khai báo các thành phần giao diện.
 #pragma once
+#include <memory>
 #include <mutex>
 #include <set>
 #include <string>
@@ -9,11 +10,11 @@
 #include "core/Eigen.h"
 #include "core/Model.h"
 #include "core/PostProcess.h"
+#include "Commands.h"
 #include "imgui.h"
 
 struct SDL_Window;
 
-enum class Tool { Select, AddNode, AddFrame, AddTruss };
 enum class ResultView { None, Deformed, N, Q, M, Sigma, Contour, Influence, Mode };
 enum class Pending { None, New, Open, OpenPath, Example, Quit };
 enum class ContourField { Ux, Uy, Umag, Sx, Sy, Txy, S1, S2, VonMises };
@@ -34,6 +35,12 @@ struct Camera {
 struct Palette {
     ImU32 bg, grid, gridMajor, axis, bar, truss, plane, planeEdge, node, text, textDim, select, hover, support, load,
         reaction, deformed, posFill, posLine, negFill, negLine, hinge;
+    ImU32 axisX, axisY, crosshair, snap, grip, gripHover, gripHot, windowSel, crossingSel;
+};
+
+// Màu giao diện ribbon / thanh trạng thái theo chủ đề
+struct UiColors {
+    ImU32 tabRow, ribbon, panelTitle, separator, text, textDim, hover, active, accent, cmdBg, statusBg;
 };
 
 struct App {
@@ -62,10 +69,6 @@ struct App {
     Camera cam;
     bool fitRequested = true;
     int fitFrames = 0; // lặp lại vài khung hình vì kích thước canvas ổn định sau khi dock
-    Tool tool = Tool::Select;
-    int pendingNode = -1;
-    bool pendingValid = false;
-    double pendingX = 0, pendingY = 0;
     double gridStep = 0.5;
     bool snapGrid = true;
     int curMat = 0, curSec = 0;
@@ -73,7 +76,9 @@ struct App {
     // ---- tùy chọn hiển thị
     bool showNodeIds = false, showElemIds = false, showLoads = true, showSupports = true, showValues = true;
     bool showReactions = true, showUndeformed = true, showDeformedWithDiagram = false, showGrid = true;
-    bool darkCanvas = false;
+    bool darkTheme = true; // giao diện tối (kiểu AutoCAD) / sáng
+    Palette pal;
+    UiColors ui;
     ResultView view = ResultView::M;
     ContourField contour = ContourField::VonMises;
     bool contourAveraged = true, contourOnDeformed = false;
@@ -100,6 +105,22 @@ struct App {
     bool animateMode = true;
     bool showEigenDialog = false;
 
+    // ---- dòng lệnh kiểu AutoCAD
+    std::unique_ptr<Command> cmd;
+    std::string cmdLine, lastCommand;
+    std::vector<std::string> typedHistory;
+    int typedPos = -1;
+    bool osnap = true, ortho = false, dynInput = true, cmdExpanded = false;
+    SnapPoint cursor;
+    bool cursorInCanvas = false;
+    double cursorWX = 0, cursorWY = 0;
+    int ribbonTab = 0;
+    // giá trị mặc định của các lệnh (nhớ lần nhập trước)
+    double defNodal[3] = {0, -10, 0};
+    double defQ1 = -10, defQ2 = -10, defP = -20, defM = 10;
+    int defDir = 3, defPDir = 3, defDiv = 2;
+    bool defProj = false;
+
     // ---- hỏi lưu thay đổi
     Pending pending = Pending::None;
     int pendingExample = -1;
@@ -108,7 +129,7 @@ struct App {
     bool quitNow = false;
 
     // ---- cửa sổ phụ
-    bool showModelPanel = true, showPropsPanel = true, showResultPanel = true, showLogPanel = true;
+    bool showModelPanel = true, showPropsPanel = true, showResultPanel = true, showLogPanel = false;
     bool showMeshDialog = false, showFrameGen = false, showTrussGen = false, showAbout = false, showDemo = false;
     bool resetLayout = true;
 
@@ -132,7 +153,7 @@ struct App {
     void trackEdit();         // gọi ngay sau một ô nhập liệu để hỗ trợ hoàn tác
     void undo();
     void redo();
-    void analyzeNow();
+    void analyzeNow(bool explicitRun = false); // explicitRun: ghi lỗi vào lịch sử lệnh
     void deleteSelection();
     void clampIndices();
     void addLog(const std::string& s);
@@ -145,9 +166,23 @@ struct App {
     std::string windowTitle() const;
     const fem::LoadSetResult* currentSet() const;
 
-    // ---- giao diện (định nghĩa trong Panels.cpp / View.cpp)
+    // ---- lệnh (Ribbon.cpp)
+    void startCommand(const std::string& name);
+    void submitCommandLine();
+    void cancelCommand();
+    void commandKeys();
+    void echo(const std::string& s);
+    std::string currentPrompt();
+    int nodeForSnap(const SnapPoint& p); // nút tại điểm: dùng nút có sẵn, cắt thanh hoặc tạo nút mới
+    std::set<int> selectionNodes() const;
+    void applyTheme();
+
+    // ---- giao diện (định nghĩa trong Ribbon.cpp / Panels.cpp / View.cpp)
+    void ribbon();
+    void statusBar();
+    void commandLine();
+    void appMenu();
     void frame();
-    void mainMenu();
     void dockLayout(unsigned int dockId);
     void modelPanel();
     void propsPanel();

@@ -740,7 +740,49 @@ static void testComboGenerator() {
           "ghi/đọc phân loại tải và tổ hợp tự sinh", 0, 0);
 }
 
+static void testSplitMerge() {
+    std::puts("Cắt thanh tại điểm, gộp nút trùng");
+    // dầm 8 m, tải hình thang + lực tập trung: cắt tại x = 3 không đổi kết quả
+    Model m = beamModel(8, 1, 3e7, 0.18, 0.0054);
+    fix(m, 0, true, true, true);
+    fix(m, 1, false, true, false);
+    m.cases[0].elem.push_back(dload(0, -5, -15));
+    ElemLoad p;
+    p.elem = 0;
+    p.kind = ElemLoadKind::Point;
+    p.q1 = -20;
+    p.a = 5.5;
+    m.cases[0].elem.push_back(p);
+    auto r1 = run(m);
+    const int nn = splitBarAt(m, 0, 3.0 / 8);
+    auto r2 = run(m);
+    check(nn == 2 && m.elements.size() == 2, "cắt thành 2 thanh", (double)m.elements.size(), 2);
+    if (r1.ok && r2.ok) {
+        near("phản lực ngàm không đổi", r2.sets[0].R[2], r1.sets[0].R[2], 1e-9);
+        near("M tại x = 3", r2.sets[0].bars[0].M.back(), barValueAt(r1.sets[0].bars[0], BarQty::M, 3.0), 1e-9);
+    }
+    // hai khung giống nhau đặt chồng: gộp nút → mô hình như một khung
+    Model k;
+    for (const auto& ex : examples())
+        if (std::string(ex.name) == "Khung 1 tầng 1 nhịp") k = ex.build();
+    auto rk = run(k);
+    Model k2 = k;
+    const int base = (int)k2.nodes.size();
+    for (int i = 0; i < base; ++i) k2.nodes.push_back(k.nodes[i]);
+    for (const auto& el : k.elements) {
+        Element c = el;
+        for (int q = 0; q < c.nodeCount(); ++q) c.n[q] += base;
+        k2.elements.push_back(c);
+    }
+    const int merged = mergeNodes(k2, 1e-9);
+    check(merged == base && k2.nodes.size() == k.nodes.size() && k2.elements.size() == k.elements.size(),
+          "gộp nút và bỏ thanh trùng", merged, base);
+    auto rk2 = run(k2);
+    if (rk.ok && rk2.ok) near("kết quả sau khi gộp", rk2.sets[0].U[4], rk.sets[0].U[4], 1e-12, 1e-15);
+}
+
 int main() {
+    testSplitMerge();
     testEigenSolver();
     testBuckling();
     testVibration();

@@ -31,19 +31,21 @@ Palette makePalette(bool dark) {
     Palette p;
     if (!dark) {
         p.bg = IM_COL32(255, 255, 255, 255);
-        p.grid = IM_COL32(232, 235, 240, 255);
-        p.gridMajor = IM_COL32(210, 215, 224, 255);
+        p.grid = IM_COL32(236, 238, 242, 255);
+        p.gridMajor = IM_COL32(214, 219, 227, 255);
         p.axis = IM_COL32(160, 168, 180, 255);
-        p.bar = IM_COL32(30, 40, 60, 255);
-        p.truss = IM_COL32(60, 90, 130, 255);
+        p.axisX = IM_COL32(220, 90, 90, 255);
+        p.axisY = IM_COL32(60, 160, 80, 255);
+        p.bar = IM_COL32(25, 30, 40, 255);
+        p.truss = IM_COL32(40, 90, 160, 255);
         p.plane = IM_COL32(190, 205, 225, 255);
         p.planeEdge = IM_COL32(110, 125, 150, 255);
         p.node = IM_COL32(20, 25, 35, 255);
         p.text = IM_COL32(20, 25, 35, 255);
         p.textDim = IM_COL32(110, 115, 125, 255);
-        p.select = IM_COL32(255, 140, 0, 255);
-        p.hover = IM_COL32(0, 150, 255, 255);
-        p.support = IM_COL32(40, 120, 60, 255);
+        p.select = IM_COL32(0, 120, 215, 255);
+        p.hover = IM_COL32(0, 140, 230, 255);
+        p.support = IM_COL32(30, 130, 60, 255);
         p.load = IM_COL32(210, 40, 40, 255);
         p.reaction = IM_COL32(20, 140, 70, 255);
         p.deformed = IM_COL32(200, 30, 140, 255);
@@ -52,32 +54,51 @@ Palette makePalette(bool dark) {
         p.negFill = IM_COL32(225, 70, 60, 70);
         p.negLine = IM_COL32(190, 40, 30, 255);
         p.hinge = IM_COL32(255, 255, 255, 255);
+        p.crosshair = IM_COL32(40, 40, 40, 255);
+        p.snap = IM_COL32(220, 130, 0, 255);
+        p.grip = IM_COL32(0, 100, 230, 255);
+        p.gripHover = IM_COL32(230, 80, 140, 255);
+        p.gripHot = IM_COL32(230, 30, 30, 255);
+        p.windowSel = IM_COL32(0, 110, 230, 255);
+        p.crossingSel = IM_COL32(20, 160, 60, 255);
     } else {
-        p.bg = IM_COL32(28, 30, 36, 255);
-        p.grid = IM_COL32(40, 43, 50, 255);
-        p.gridMajor = IM_COL32(54, 58, 68, 255);
-        p.axis = IM_COL32(90, 96, 110, 255);
-        p.bar = IM_COL32(225, 230, 240, 255);
-        p.truss = IM_COL32(150, 190, 240, 255);
-        p.plane = IM_COL32(60, 75, 100, 255);
-        p.planeEdge = IM_COL32(120, 135, 160, 255);
-        p.node = IM_COL32(235, 235, 240, 255);
-        p.text = IM_COL32(235, 235, 240, 255);
-        p.textDim = IM_COL32(150, 155, 165, 255);
-        p.select = IM_COL32(255, 160, 40, 255);
-        p.hover = IM_COL32(80, 190, 255, 255);
-        p.support = IM_COL32(110, 210, 130, 255);
+        // nền vùng vẽ kiểu AutoCAD (tối)
+        p.bg = IM_COL32(33, 40, 48, 255);
+        p.grid = IM_COL32(41, 49, 58, 255);
+        p.gridMajor = IM_COL32(53, 63, 75, 255);
+        p.axis = IM_COL32(90, 100, 115, 255);
+        p.axisX = IM_COL32(160, 70, 70, 255);
+        p.axisY = IM_COL32(70, 150, 80, 255);
+        p.bar = IM_COL32(236, 238, 242, 255);
+        p.truss = IM_COL32(130, 190, 255, 255);
+        p.plane = IM_COL32(64, 80, 104, 255);
+        p.planeEdge = IM_COL32(125, 140, 165, 255);
+        p.node = IM_COL32(236, 238, 242, 255);
+        p.text = IM_COL32(232, 234, 238, 255);
+        p.textDim = IM_COL32(150, 158, 170, 255);
+        p.select = IM_COL32(70, 160, 255, 255);
+        p.hover = IM_COL32(100, 185, 255, 255);
+        p.support = IM_COL32(100, 210, 130, 255);
         p.load = IM_COL32(255, 100, 90, 255);
         p.reaction = IM_COL32(90, 220, 140, 255);
-        p.deformed = IM_COL32(255, 90, 200, 255);
+        p.deformed = IM_COL32(255, 100, 205, 255);
         p.posFill = IM_COL32(80, 140, 255, 80);
         p.posLine = IM_COL32(120, 170, 255, 255);
         p.negFill = IM_COL32(255, 90, 80, 80);
-        p.negLine = IM_COL32(255, 120, 110, 255);
-        p.hinge = IM_COL32(28, 30, 36, 255);
+        p.negLine = IM_COL32(255, 125, 115, 255);
+        p.hinge = IM_COL32(33, 40, 48, 255);
+        p.crosshair = IM_COL32(225, 228, 232, 255);
+        p.snap = IM_COL32(255, 205, 40, 255);
+        p.grip = IM_COL32(40, 120, 255, 255);
+        p.gripHover = IM_COL32(255, 120, 170, 255);
+        p.gripHot = IM_COL32(255, 50, 50, 255);
+        p.windowSel = IM_COL32(60, 140, 255, 255);
+        p.crossingSel = IM_COL32(60, 200, 90, 255);
     }
     return p;
 }
+
+void App::echo(const std::string& s) { addLog(s); }
 
 void App::addLog(const std::string& s) {
     log.push_back(s);
@@ -102,7 +123,6 @@ void App::clampIndices() {
         it = (*it >= (int)model.nodes.size()) ? selNodes.erase(it) : std::next(it);
     for (auto it = selElems.begin(); it != selElems.end();)
         it = (*it >= (int)model.elements.size()) ? selElems.erase(it) : std::next(it);
-    if (pendingNode >= (int)model.nodes.size()) pendingNode = -1;
 }
 
 const LoadSetResult* App::currentSet() const {
@@ -113,14 +133,13 @@ const LoadSetResult* App::currentSet() const {
     return &s;
 }
 
-void App::analyzeNow() {
+void App::analyzeNow(bool explicitRun) {
     clampIndices();
-    const std::string prevError = result.error;
     result = analyze(model);
     resultValid = result.ok;
     ++resultVersion;
     needAnalyze = false;
-    if (!result.ok && result.error != prevError) addLog("Lỗi: " + result.error);
+    if (!result.ok && explicitRun) addLog("Lỗi: " + result.error);
     clampIndices();
 }
 
@@ -176,7 +195,6 @@ void App::deleteSelection() {
     model.removeNodes(std::vector<int>(selNodes.begin(), selNodes.end()));
     selNodes.clear();
     selElems.clear();
-    pendingNode = -1;
     changed();
 }
 
@@ -197,7 +215,7 @@ void App::newModel() {
     cam.cy = 2;
     cam.scale = 60;
     fitRequested = false;
-    tool = Tool::AddFrame;
+    startCommand("L");
     ++modelVersion;
     ilPath.clear();
     analyzeNow();
@@ -215,7 +233,7 @@ void App::loadExample(int i) {
     dirty = false;
     activeCase = resultSet = 0;
     fitRequested = true;
-    tool = Tool::Select;
+    cmd.reset();
     ++modelVersion;
     ilPath.clear();
     ilTarget = IlTarget{};
@@ -242,7 +260,7 @@ bool App::openFile(const std::string& path) {
     dirty = false;
     activeCase = resultSet = 0;
     fitRequested = true;
-    tool = Tool::Select;
+    cmd.reset();
     ++modelVersion;
     ilPath.clear();
     ilTarget = IlTarget{};
@@ -340,7 +358,7 @@ void App::shortcuts() {
     if (Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, g) && confirmDiscard(Pending::Open)) requestOpen();
     if (Shortcut(ImGuiMod_Ctrl | ImGuiKey_N, g) && confirmDiscard(Pending::New)) newModel();
     if (Shortcut(ImGuiKey_F5, g)) {
-        analyzeNow();
+        analyzeNow(true);
         if (result.ok)
             addLog("Tính xong: " + std::to_string(result.numEquations) + " phương trình, " +
                    std::to_string((int)result.timeMs) + " ms");
@@ -349,8 +367,13 @@ void App::shortcuts() {
 
 void App::frame() {
     if (needAnalyze && autoAnalyze) analyzeNow();
+    pal = makePalette(darkTheme);
     shortcuts();
-    mainMenu();
+    commandKeys();
+    // thứ tự: ribbon (trên), thanh trạng thái (dưới cùng), dòng lệnh (trên thanh trạng thái), rồi vùng dock
+    ribbon();
+    statusBar();
+    commandLine();
     const ImGuiID dock = ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_None);
     dockLayout(dock);
 
@@ -382,93 +405,14 @@ void App::dockLayout(unsigned int dockId) {
     ImGui::DockBuilderSetNodeSize(dockId, ImGui::GetMainViewport()->WorkSize);
     ImGuiID center = dockId;
     ImGuiID left = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.24f, nullptr, &center);
-    ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.30f, nullptr, &center);
-    ImGuiID bottom = ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, 0.16f, nullptr, &center);
-    ImGuiID leftBottom = ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.45f, nullptr, &left);
+    ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.27f, nullptr, &center);
+    ImGuiID leftBottom = ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.42f, nullptr, &left);
     ImGui::DockBuilderDockWindow("Sơ đồ kết cấu", center);
-    ImGui::DockBuilderDockWindow("Mô hình", left);
-    ImGui::DockBuilderDockWindow("Thuộc tính", leftBottom);
+    ImGui::DockBuilderDockWindow("Thuộc tính", left);
+    ImGui::DockBuilderDockWindow("Mô hình", leftBottom);
     ImGui::DockBuilderDockWindow("Kết quả", right);
-    ImGui::DockBuilderDockWindow("Nhật ký", bottom);
+    ImGui::DockBuilderDockWindow("Nhật ký", right);
     ImGui::DockBuilderFinish(dockId);
-}
-
-void App::mainMenu() {
-    if (!ImGui::BeginMainMenuBar()) return;
-    if (ImGui::BeginMenu("Tệp")) {
-        if (ImGui::MenuItem("Mới", "Ctrl+N") && confirmDiscard(Pending::New)) newModel();
-        if (ImGui::MenuItem("Mở...", "Ctrl+O") && confirmDiscard(Pending::Open)) requestOpen();
-        if (ImGui::MenuItem("Lưu", "Ctrl+S")) requestSave(false);
-        if (ImGui::MenuItem("Lưu thành...")) requestSave(true);
-        ImGui::Separator();
-        if (ImGui::BeginMenu("Ví dụ mẫu")) {
-            const auto& ex = examples();
-            for (size_t i = 0; i < ex.size(); ++i) {
-                if (ImGui::MenuItem(ex[i].name) && confirmDiscard(Pending::Example, (int)i)) loadExample((int)i);
-                if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", ex[i].note);
-            }
-            ImGui::EndMenu();
-        }
-        ImGui::Separator();
-        if (ImGui::MenuItem("Xuất báo cáo kết quả...")) requestReport();
-        ImGui::EndMenu();
-    }
-    if (ImGui::BeginMenu("Sửa")) {
-        if (ImGui::MenuItem("Hoàn tác", "Ctrl+Z", false, !undoStack.empty())) undo();
-        if (ImGui::MenuItem("Làm lại", "Ctrl+Y", false, !redoStack.empty())) redo();
-        ImGui::Separator();
-        if (ImGui::MenuItem("Chọn tất cả", "Ctrl+A")) {
-            for (int i = 0; i < (int)model.nodes.size(); ++i) selNodes.insert(i);
-            for (int i = 0; i < (int)model.elements.size(); ++i) selElems.insert(i);
-        }
-        if (ImGui::MenuItem("Xóa đối tượng chọn", "Delete", false, !selNodes.empty() || !selElems.empty()))
-            deleteSelection();
-        if (ImGui::MenuItem("Xóa nút thừa")) {
-            snapshot();
-            model.removeUnusedNodes();
-            changed();
-        }
-        ImGui::EndMenu();
-    }
-    if (ImGui::BeginMenu("Tạo")) {
-        if (ImGui::MenuItem("Khung / dầm liên tục...")) showFrameGen = true;
-        if (ImGui::MenuItem("Dàn...")) showTrussGen = true;
-        if (ImGui::MenuItem("Lưới phần tử phẳng...")) showMeshDialog = true;
-        ImGui::EndMenu();
-    }
-    if (ImGui::BeginMenu("Tính toán")) {
-        if (ImGui::MenuItem("Tính ngay", "F5")) {
-            analyzeNow();
-            if (result.ok) addLog("Tính xong: " + std::to_string(result.numEquations) + " phương trình");
-        }
-        ImGui::MenuItem("Tự động tính khi thay đổi", nullptr, &autoAnalyze);
-        ImGui::Separator();
-        if (ImGui::MenuItem("Ổn định & dao động riêng...")) showEigenDialog = true;
-        ImGui::EndMenu();
-    }
-    if (ImGui::BeginMenu("Xem")) {
-        ImGui::MenuItem("Mô hình", nullptr, &showModelPanel);
-        ImGui::MenuItem("Thuộc tính", nullptr, &showPropsPanel);
-        ImGui::MenuItem("Kết quả", nullptr, &showResultPanel);
-        ImGui::MenuItem("Nhật ký", nullptr, &showLogPanel);
-        ImGui::Separator();
-        ImGui::MenuItem("Số hiệu nút", nullptr, &showNodeIds);
-        ImGui::MenuItem("Số hiệu phần tử", nullptr, &showElemIds);
-        ImGui::MenuItem("Tải trọng", nullptr, &showLoads);
-        ImGui::MenuItem("Gối tựa", nullptr, &showSupports);
-        ImGui::MenuItem("Lưới", nullptr, &showGrid);
-        ImGui::MenuItem("Nền tối", nullptr, &darkCanvas);
-        ImGui::Separator();
-        if (ImGui::MenuItem("Vừa khung nhìn", "F")) fitRequested = true;
-        if (ImGui::MenuItem("Khôi phục bố cục")) resetLayout = true;
-        ImGui::MenuItem("ImGui demo", nullptr, &showDemo);
-        ImGui::EndMenu();
-    }
-    if (ImGui::BeginMenu("Trợ giúp")) {
-        if (ImGui::MenuItem("Giới thiệu & quy ước")) showAbout = true;
-        ImGui::EndMenu();
-    }
-    ImGui::EndMainMenuBar();
 }
 
 // ---------------------------------------------------------------- hỏi lưu thay đổi

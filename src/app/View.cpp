@@ -6,6 +6,7 @@
 
 #include "App.h"
 #include "core/Elements.h"
+#include "core/Mesher.h"
 
 using namespace fem;
 
@@ -134,69 +135,15 @@ struct Interaction {
 const char* contourFieldName(ContourField f) { return fieldName(f); }
 
 void App::viewport() {
-    P = makePalette(darkCanvas);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(4, 4));
+    P = pal;
+    {
+        ImGuiWindowClass wc;
+        wc.DockNodeFlagsOverrideSet = ImGuiDockNodeFlags_AutoHideTabBar;
+        ImGui::SetNextWindowClass(&wc);
+    }
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     ImGui::Begin("Sơ đồ kết cấu", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
     ImGui::PopStyleVar();
-
-    // ---------------------------------------------------------------- thanh công cụ
-    const float toolbarRight = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
-    bool firstItem = true;
-    // đặt mục tiếp theo cùng hàng nếu còn chỗ, ngược lại xuống dòng
-    auto flow = [&](float w) {
-        if (!firstItem && ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x + w < toolbarRight) ImGui::SameLine();
-        firstItem = false;
-    };
-    auto toolButton = [&](const char* text, bool on, const char* tip) {
-        flow(ImGui::CalcTextSize(text, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2);
-        if (on) ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-        const bool r = ImGui::Button(text);
-        if (on) ImGui::PopStyleColor();
-        if (tip && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tip);
-        return r;
-    };
-    if (toolButton("Chọn", tool == Tool::Select, "Chọn nút/phần tử (kéo để chọn vùng, Shift để thêm)")) tool = Tool::Select;
-    if (toolButton("+ Nút", tool == Tool::AddNode, "Nhấp để thêm nút (bắt lưới)")) tool = Tool::AddNode;
-    if (toolButton("+ Thanh khung", tool == Tool::AddFrame, "Nhấp liên tiếp các điểm để vẽ thanh khung; chuột phải/Esc để dừng"))
-        tool = Tool::AddFrame;
-    if (toolButton("+ Thanh dàn", tool == Tool::AddTruss, "Vẽ thanh dàn (chỉ chịu kéo nén)")) tool = Tool::AddTruss;
-    flow(170);
-    ImGui::SetNextItemWidth(170);
-    {
-        std::vector<std::string> names;
-        for (auto& c : model.cases) names.push_back("TH: " + c.name);
-        for (auto& c : model.combos) names.push_back("THợp: " + c.name);
-        if (resultSet >= (int)names.size()) resultSet = 0;
-        if (ImGui::BeginCombo("##set", names.empty() ? "" : names[resultSet].c_str())) {
-            for (int i = 0; i < (int)names.size(); ++i)
-                if (ImGui::Selectable(names[i].c_str(), i == resultSet)) {
-                    resultSet = i;
-                    if (i < (int)model.cases.size()) activeCase = i;
-                }
-            ImGui::EndCombo();
-        }
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Trường hợp tải / tổ hợp đang xem (và soạn tải)");
-    }
-    struct VB {
-        const char* t;
-        ResultView v;
-        const char* tip;
-    };
-    const VB vbs[] = {{"Sơ đồ", ResultView::None, "Chỉ sơ đồ tính"},
-                      {"Biến dạng", ResultView::Deformed, "Hình dạng biến dạng"},
-                      {"N", ResultView::N, "Biểu đồ lực dọc"},
-                      {"Q", ResultView::Q, "Biểu đồ lực cắt"},
-                      {"M", ResultView::M, "Biểu đồ mômen (vẽ về phía thớ căng)"},
-                      {"σ", ResultView::Sigma, "Ứng suất pháp lớn nhất ở thớ biên: N/A ± M/W"},
-                      {"Màu", ResultView::Contour, "Phổ màu ứng suất / chuyển vị (phần tử phẳng)"},
-                      {"Đah", ResultView::Influence, "Đường ảnh hưởng (thiết lập trong panel Kết quả)"},
-                      {"Dạng riêng", ResultView::Mode, "Dạng mất ổn định / dạng dao động riêng (Tính toán → Ổn định & dao động)"}};
-    for (const auto& b : vbs)
-        if (toolButton(b.t, view == b.v, b.tip)) {
-            view = b.v;
-            if (view == ResultView::Mode && !(eig.ok && eigVersion == modelVersion)) showEigenDialog = true;
-        }
-    if (toolButton("Vừa khung", false, "Phóng vừa toàn bộ kết cấu (phím F)")) fitRequested = true;
 
     // ---------------------------------------------------------------- canvas
     const ImVec2 p0 = ImGui::GetCursorScreenPos();
@@ -907,7 +854,7 @@ void App::viewport() {
         if (trussOnly[i]) {
             dl->AddCircleFilled(p, 3.8f, P.hinge);
             dl->AddCircle(p, 3.8f, P.truss, 0, 1.4f);
-        } else if (!planeNode[i] || anyBar[i] || showNodeIds || tool != Tool::Select) {
+        } else if (!planeNode[i] || anyBar[i] || showNodeIds || cmd) {
             dl->AddCircleFilled(p, planeNode[i] ? 1.8f : 2.6f, P.node);
         }
         if (selNodes.count((int)i)) dl->AddCircle(p, 6.5f, P.select, 0, 2.2f);
@@ -934,7 +881,7 @@ void App::viewport() {
         }
     }
 
-    // ---------------------------------------------------------------- tương tác
+    // ---------------------------------------------------------------- tương tác kiểu AutoCAD
     const ImVec2 mp = io.MousePos;
     double wx, wy;
     cam.toWorld(mp, wx, wy);
@@ -982,27 +929,125 @@ void App::viewport() {
         }
         return -1;
     };
-    // điểm bắt dính khi vẽ
-    auto snapPoint = [&](double& sx, double& sy) -> int {
-        const int n = pickNode(10);
-        if (n >= 0) {
-            sx = m.nodes[n].x;
-            sy = m.nodes[n].y;
-            return n;
-        }
-        sx = wx;
-        sy = wy;
-        if (snapGrid && gridStep > 0) {
-            sx = std::round(wx / gridStep) * gridStep;
-            sy = std::round(wy / gridStep) * gridStep;
-        }
-        return -1;
-    };
 
+    // ---- bắt điểm (OSNAP / lưới / ORTHO)
+    const bool pointMode = cmd && cmd->wantsPoint();
+    const bool selectMode = !cmd || cmd->wantsSelection();
+    double bx = 0, by = 0;
+    const bool hasBase = cmd && cmd->base(bx, by);
+    SnapPoint sp;
+    sp.x = wx;
+    sp.y = wy;
+    if (pointMode && hovered) {
+        const float ap = 12; // ô bắt điểm (px)
+        struct Cand {
+            SnapPoint p;
+            float d;
+            int pri;
+        };
+        std::vector<Cand> cands;
+        auto consider = [&](SnapPoint p, int pri) {
+            const float d = len(cam.toScreen(p.x, p.y) - mp);
+            if (d <= ap) cands.push_back({p, d, pri});
+        };
+        if (osnap) {
+            for (size_t i = 0; i < m.nodes.size(); ++i) {
+                SnapPoint p;
+                p.x = m.nodes[i].x;
+                p.y = m.nodes[i].y;
+                p.kind = SnapKind::Node;
+                p.node = (int)i;
+                consider(p, 0);
+            }
+            std::vector<int> near;
+            for (size_t e = 0; e < m.elements.size(); ++e) {
+                const Element& el = m.elements[e];
+                if (!el.isBar()) continue;
+                const Node& A = m.nodes[el.n[0]];
+                const Node& B = m.nodes[el.n[1]];
+                SnapPoint mid;
+                mid.x = 0.5 * (A.x + B.x);
+                mid.y = 0.5 * (A.y + B.y);
+                mid.kind = SnapKind::Mid;
+                mid.elem = (int)e;
+                mid.t = 0.5;
+                consider(mid, 1);
+                const double dx = B.x - A.x, dy = B.y - A.y, L2 = dx * dx + dy * dy;
+                if (L2 <= 0) continue;
+                const double t = std::clamp(((wx - A.x) * dx + (wy - A.y) * dy) / L2, 0.0, 1.0);
+                if (len(cam.toScreen(A.x + t * dx, A.y + t * dy) - mp) <= ap) near.push_back((int)e);
+                if (hasBase) {
+                    const double tp = ((bx - A.x) * dx + (by - A.y) * dy) / L2;
+                    if (tp > 1e-6 && tp < 1 - 1e-6) {
+                        SnapPoint pp;
+                        pp.x = A.x + tp * dx;
+                        pp.y = A.y + tp * dy;
+                        pp.kind = SnapKind::Perpendicular;
+                        pp.elem = (int)e;
+                        pp.t = tp;
+                        consider(pp, 3);
+                    }
+                }
+                if (t > 1e-6 && t < 1 - 1e-6) {
+                    SnapPoint np;
+                    np.x = A.x + t * dx;
+                    np.y = A.y + t * dy;
+                    np.kind = SnapKind::Nearest;
+                    np.elem = (int)e;
+                    np.t = t;
+                    consider(np, 4);
+                }
+            }
+            // giao điểm của các thanh gần con trỏ
+            for (size_t i = 0; i < near.size(); ++i)
+                for (size_t j = i + 1; j < near.size(); ++j) {
+                    const Element& e1 = m.elements[near[i]];
+                    const Element& e2 = m.elements[near[j]];
+                    const Node &A = m.nodes[e1.n[0]], &B = m.nodes[e1.n[1]], &C = m.nodes[e2.n[0]], &D = m.nodes[e2.n[1]];
+                    const double r1x = B.x - A.x, r1y = B.y - A.y, r2x = D.x - C.x, r2y = D.y - C.y;
+                    const double den = r1x * r2y - r1y * r2x;
+                    if (std::abs(den) < 1e-12) continue;
+                    const double t = ((C.x - A.x) * r2y - (C.y - A.y) * r2x) / den;
+                    const double u = ((C.x - A.x) * r1y - (C.y - A.y) * r1x) / den;
+                    if (t <= 1e-9 || t >= 1 - 1e-9 || u < -1e-9 || u > 1 + 1e-9) continue;
+                    SnapPoint ip;
+                    ip.x = A.x + t * r1x;
+                    ip.y = A.y + t * r1y;
+                    ip.kind = SnapKind::Intersection;
+                    ip.elem = near[i];
+                    ip.t = t;
+                    ip.elem2 = near[j];
+                    ip.t2 = u;
+                    consider(ip, 2);
+                }
+        }
+        if (!cands.empty()) {
+            std::sort(cands.begin(), cands.end(), [](const Cand& a, const Cand& b) {
+                return a.pri != b.pri ? a.pri < b.pri : a.d < b.d;
+            });
+            sp = cands[0].p;
+        } else {
+            if (ortho && hasBase) {
+                if (std::abs(wx - bx) >= std::abs(wy - by)) sp.y = by;
+                else sp.x = bx;
+            }
+            if (snapGrid && gridStep > 0) {
+                const bool lockY = ortho && hasBase && sp.y == by, lockX = ortho && hasBase && sp.x == bx;
+                if (!lockX) sp.x = std::round(sp.x / gridStep) * gridStep;
+                if (!lockY) sp.y = std::round(sp.y / gridStep) * gridStep;
+                sp.kind = SnapKind::Grid;
+            }
+        }
+    }
+    cursor = sp;
+    cursorInCanvas = hovered;
     if (hovered) {
-        hoverNode = pickNode(8);
-        if (hoverNode < 0) hoverElem = pickElem();
-        // phóng to/thu nhỏ quanh con trỏ
+        cursorWX = pointMode ? sp.x : wx;
+        cursorWY = pointMode ? sp.y : wy;
+    }
+
+    // ---- zoom, pan
+    if (hovered) {
         if (io.MouseWheel != 0 && !io.KeyShift) {
             const double f = std::pow(1.15, io.MouseWheel);
             cam.scale = std::clamp(cam.scale * f, 1e-3, 1e7);
@@ -1010,111 +1055,171 @@ void App::viewport() {
             cam.cx = wx - (mp.x - c.x) / cam.scale;
             cam.cy = wy + (mp.y - c.y) / cam.scale;
         }
-        if (io.MouseWheelH != 0 || (io.MouseWheel != 0 && io.KeyShift)) {
+        if (io.MouseWheelH != 0 || (io.MouseWheel != 0 && io.KeyShift))
             cam.cx -= (io.MouseWheelH + (io.KeyShift ? io.MouseWheel : 0)) * 40 / cam.scale;
-        }
+        if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Middle)) fitRequested = true;
     }
     if (ImGui::IsItemActive() &&
-        (ImGui::IsMouseDragging(ImGuiMouseButton_Right, 2) || ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 2))) {
+        (ImGui::IsMouseDragging(ImGuiMouseButton_Right, 3) || ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 1))) {
         cam.cx -= io.MouseDelta.x / cam.scale;
         cam.cy += io.MouseDelta.y / cam.scale;
     }
 
-    // tô sáng đối tượng dưới con trỏ
+    // ---- đối tượng dưới con trỏ (chế độ chọn)
+    if (hovered && selectMode && !g_in.boxing) {
+        hoverNode = pickNode(8);
+        if (hoverNode < 0) hoverElem = pickElem();
+    }
     if (hoverNode >= 0) dl->AddCircle(nodePos(hoverNode, false), 7, P.hover, 0, 2);
     else if (hoverElem >= 0) {
         const Element& el = m.elements[hoverElem];
         ImVec2 pts[4];
         for (int k = 0; k < el.nodeCount(); ++k) pts[k] = nodePos(el.n[k], false);
-        if (el.isBar()) dl->AddLine(pts[0], pts[1], withAlpha(P.hover, 160), 4);
+        if (el.isBar()) dl->AddLine(pts[0], pts[1], withAlpha(P.hover, 170), 4.5f);
         else dl->AddPolyline(pts, el.nodeCount(), P.hover, 2.0f, ImDrawFlags_Closed);
     }
 
-    // vẽ trước điểm bắt dính
-    double sx = 0, sy = 0;
-    int snapNode = -1;
-    if (hovered && tool != Tool::Select) {
-        snapNode = snapPoint(sx, sy);
-        const ImVec2 sp = cam.toScreen(sx, sy);
-        dl->AddLine(sp - ImVec2(8, 0), sp + ImVec2(8, 0), P.hover, 1.5f);
-        dl->AddLine(sp - ImVec2(0, 8), sp + ImVec2(0, 8), P.hover, 1.5f);
-        if ((tool == Tool::AddFrame || tool == Tool::AddTruss) && pendingNode >= 0)
-            dl->AddLine(nodePos(pendingNode, false), sp, P.hover, 1.5f);
+    // ---- grip của đối tượng đang chọn (khi không có lệnh)
+    int hoverGrip = -1;
+    if (!cmd) {
+        for (int n : selectionNodes()) {
+            const ImVec2 p = nodePos(n, false);
+            const bool hv = hovered && std::abs(p.x - mp.x) <= 6 && std::abs(p.y - mp.y) <= 6;
+            if (hv) hoverGrip = n;
+            dl->AddRectFilled(p - ImVec2(4.5f, 4.5f), p + ImVec2(4.5f, 4.5f), hv ? P.gripHover : P.grip);
+            dl->AddRect(p - ImVec2(4.5f, 4.5f), p + ImVec2(4.5f, 4.5f), withAlpha(P.bg, 255));
+        }
     }
 
-    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-        g_in.leftDown = true;
+    // ---- xem trước của lệnh
+    if (cmd && hovered) cmd->preview(*this, dl, sp);
+
+    // ---- chuột trái
+    const bool add = !io.KeyShift; // AutoCAD: nhấp để thêm vào tập chọn, Shift+nhấp để bỏ ra
+    auto finishBox = [&](ImVec2 end) {
+        const bool window = end.x >= g_in.start.x; // trái→phải: cửa sổ; phải→trái: cắt ngang
+        const ImVec2 r0(std::min(g_in.start.x, end.x), std::min(g_in.start.y, end.y));
+        const ImVec2 r1(std::max(g_in.start.x, end.x), std::max(g_in.start.y, end.y));
+        auto inside = [&](ImVec2 p) { return p.x >= r0.x && p.x <= r1.x && p.y >= r0.y && p.y <= r1.y; };
+        auto segHits = [&](ImVec2 a, ImVec2 b) {
+            if (inside(a) || inside(b)) return true;
+            // giao với 4 cạnh khung
+            auto cross = [](ImVec2 p, ImVec2 q, ImVec2 r, ImVec2 s2) {
+                auto o = [](ImVec2 a2, ImVec2 b2, ImVec2 c2) { return (b2.x - a2.x) * (c2.y - a2.y) - (b2.y - a2.y) * (c2.x - a2.x); };
+                return (o(p, q, r) * o(p, q, s2) < 0) && (o(r, s2, p) * o(r, s2, q) < 0);
+            };
+            const ImVec2 c[4] = {r0, ImVec2(r1.x, r0.y), r1, ImVec2(r0.x, r1.y)};
+            for (int k = 0; k < 4; ++k)
+                if (cross(a, b, c[k], c[(k + 1) % 4])) return true;
+            return false;
+        };
+        auto put = [&](std::set<int>& s2, int id) {
+            if (add) s2.insert(id);
+            else s2.erase(id);
+        };
+        for (size_t i = 0; i < m.nodes.size(); ++i)
+            if (inside(nodePos((int)i, false))) put(selNodes, (int)i);
+        for (size_t e = 0; e < m.elements.size(); ++e) {
+            const Element& el = m.elements[e];
+            const int nc = el.nodeCount();
+            bool all = true, any = false;
+            for (int k = 0; k < nc; ++k) {
+                const ImVec2 a = nodePos(el.n[k], false), b = nodePos(el.n[(k + 1) % nc], false);
+                all &= inside(a);
+                if (el.isBar() && k == 1) break;
+                any |= segHits(a, b);
+            }
+            if (window ? all : (all || any)) put(selElems, (int)e);
+        }
         g_in.boxing = false;
-        g_in.start = mp;
-    }
-    if (g_in.leftDown && tool == Tool::Select && ImGui::IsMouseDragging(ImGuiMouseButton_Left, 4)) g_in.boxing = true;
-    if (g_in.boxing) {
-        dl->AddRectFilled(g_in.start, mp, withAlpha(P.hover, 30));
-        dl->AddRect(g_in.start, mp, P.hover);
-    }
-    if (g_in.leftDown && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
-        g_in.leftDown = false;
-        const bool add = io.KeyShift || io.KeyCtrl;
-        if (g_in.boxing) {
-            g_in.boxing = false;
-            const ImVec2 r0(std::min(g_in.start.x, mp.x), std::min(g_in.start.y, mp.y));
-            const ImVec2 r1(std::max(g_in.start.x, mp.x), std::max(g_in.start.y, mp.y));
-            auto inside = [&](ImVec2 p) { return p.x >= r0.x && p.x <= r1.x && p.y >= r0.y && p.y <= r1.y; };
-            if (!add) {
-                selNodes.clear();
-                selElems.clear();
-            }
-            for (size_t i = 0; i < m.nodes.size(); ++i)
-                if (inside(nodePos((int)i, false))) selNodes.insert((int)i);
-            for (size_t e = 0; e < m.elements.size(); ++e) {
-                bool all = true;
-                for (int k = 0; k < m.elements[e].nodeCount(); ++k) all &= inside(nodePos(m.elements[e].n[k], false));
-                if (all) selElems.insert((int)e);
-            }
-        } else if (tool == Tool::Select) {
-            if (!add) {
-                selNodes.clear();
-                selElems.clear();
-            }
-            if (hoverNode >= 0) {
-                if (add && selNodes.count(hoverNode)) selNodes.erase(hoverNode);
-                else selNodes.insert(hoverNode);
-            } else if (hoverElem >= 0) {
-                if (add && selElems.count(hoverElem)) selElems.erase(hoverElem);
-                else selElems.insert(hoverElem);
-            }
-        } else if (tool == Tool::AddNode) {
-            if (snapNode < 0) {
-                snapshot();
-                model.addNode(sx, sy);
-                changed();
-            }
-        } else {
-            int idx = snapNode;
-            if (pendingNode < 0) {
-                if (idx < 0) {
-                    snapshot();
-                    idx = model.addNode(sx, sy);
-                    changed();
+    };
+    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        if (pointMode) {
+            cmd->onPoint(*this, sp);
+            if (cmd && cmd->done) cmd.reset();
+        } else if (g_in.boxing) {
+            finishBox(mp); // kiểu AutoCAD: nhấp – di chuột – nhấp
+        } else if (!cmd && hoverGrip >= 0) {
+            // nhấp grip: kéo giãn nút
+            struct GripCmd : Command {
+                int node;
+                double x0, y0;
+                GripCmd(int n, double x, double y) : node(n), x0(x), y0(y) { name = "** KÉO GIÃN **"; }
+                bool wantsPoint() const override { return true; }
+                bool base(double& x, double& y) const override {
+                    x = x0;
+                    y = y0;
+                    return true;
                 }
-                pendingNode = idx;
-            } else if (idx != pendingNode) {
-                snapshot();
-                if (idx < 0) idx = model.addNode(sx, sy);
-                Element el;
-                el.type = tool == Tool::AddTruss ? ElemType::Truss : ElemType::Frame;
-                el.n = {pendingNode, idx, -1, -1};
-                el.mat = curMat;
-                el.sec = curSec;
-                if (model.materials.empty()) model.materials.push_back(Material{});
-                if (model.sections.empty()) model.sections.push_back(Section{});
-                if (model.findElement(el.type, el.n) < 0) model.elements.push_back(el);
-                pendingNode = idx;
-                changed();
+                std::string prompt(App&) override { return "Chỉ định điểm mới cho nút:"; }
+                void onPoint(App& a, const SnapPoint& p) override {
+                    a.snapshot();
+                    a.model.nodes[node] = {p.x, p.y};
+                    double X0, Y0, X1, Y1;
+                    a.model.bounds(X0, Y0, X1, Y1);
+                    mergeNodes(a.model, 1e-6 * std::max({1.0, X1 - X0, Y1 - Y0}));
+                    a.selNodes.clear();
+                    a.selElems.clear();
+                    a.changed();
+                    done = true;
+                }
+                void preview(App& a, ImDrawList* d, const SnapPoint& c) override {
+                    for (const auto& el : a.model.elements) {
+                        if (!el.isBar()) continue;
+                        for (int k = 0; k < 2; ++k)
+                            if (el.n[k] == node) {
+                                const Node& o = a.model.nodes[el.n[1 - k]];
+                                d->AddLine(a.cam.toScreen(o.x, o.y), a.cam.toScreen(c.x, c.y), a.pal.hover, 1.5f);
+                            }
+                    }
+                    const ImVec2 p = a.cam.toScreen(x0, y0);
+                    d->AddRectFilled(ImVec2(p.x - 4.5f, p.y - 4.5f), ImVec2(p.x + 4.5f, p.y + 4.5f), a.pal.gripHot);
+                }
+            };
+            cmd = std::make_unique<GripCmd>(hoverGrip, m.nodes[hoverGrip].x, m.nodes[hoverGrip].y);
+        } else if (selectMode) {
+            g_in.leftDown = true;
+            g_in.start = mp;
+            if (hoverNode >= 0) {
+                if (add) selNodes.insert(hoverNode);
+                else selNodes.erase(hoverNode);
+                g_in.leftDown = false;
+            } else if (hoverElem >= 0) {
+                if (add) selElems.insert(hoverElem);
+                else selElems.erase(hoverElem);
+                g_in.leftDown = false;
+            } else {
+                g_in.boxing = true; // bắt đầu khung chọn
             }
         }
     }
-    // chuột phải: hủy thao tác vẽ hoặc mở menu ngữ cảnh
+    if (g_in.leftDown && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+        g_in.leftDown = false;
+        if (g_in.boxing && len(mp - g_in.start) > 5) finishBox(mp); // kéo – thả
+    }
+    if (g_in.boxing && !selectMode) g_in.boxing = false;
+    if (g_in.boxing) {
+        const bool window = mp.x >= g_in.start.x;
+        const ImU32 c = window ? P.windowSel : P.crossingSel;
+        dl->AddRectFilled(g_in.start, mp, withAlpha(c, 40));
+        if (window) dl->AddRect(g_in.start, mp, c, 0, 1.2f);
+        else {
+            // viền nét đứt cho chọn cắt ngang
+            const ImVec2 r0(std::min(g_in.start.x, mp.x), std::min(g_in.start.y, mp.y));
+            const ImVec2 r1(std::max(g_in.start.x, mp.x), std::max(g_in.start.y, mp.y));
+            auto dash = [&](ImVec2 a, ImVec2 b) {
+                const float L = len(b - a);
+                const ImVec2 d = norm(b - a);
+                for (float t = 0; t < L; t += 8) dl->AddLine(a + d * t, a + d * std::min(t + 4, L), c, 1.2f);
+            };
+            dash(r0, ImVec2(r1.x, r0.y));
+            dash(ImVec2(r1.x, r0.y), r1);
+            dash(r1, ImVec2(r0.x, r1.y));
+            dash(ImVec2(r0.x, r1.y), r0);
+        }
+    }
+
+    // ---- chuột phải (không kéo): Enter khi đang có lệnh, menu ngữ cảnh khi rảnh
     if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
         g_in.rightDown = true;
         g_in.start = mp;
@@ -1122,66 +1227,102 @@ void App::viewport() {
     if (g_in.rightDown && ImGui::IsMouseReleased(ImGuiMouseButton_Right)) {
         g_in.rightDown = false;
         if (len(mp - g_in.start) < 4) {
-            if (tool != Tool::Select && pendingNode >= 0) pendingNode = -1;
-            else {
-                if (hoverNode >= 0 && !selNodes.count(hoverNode)) {
-                    selNodes = {hoverNode};
-                    selElems.clear();
-                } else if (hoverElem >= 0 && !selElems.count(hoverElem)) {
-                    selElems = {hoverElem};
-                    selNodes.clear();
-                }
+            if (g_in.boxing) g_in.boxing = false;
+            else if (cmd) {
+                cmd->onEnter(*this);
+                if (cmd && cmd->done) cmd.reset();
+            } else {
+                if (hoverNode >= 0 && !selNodes.count(hoverNode)) selNodes.insert(hoverNode);
+                else if (hoverElem >= 0 && !selElems.count(hoverElem)) selElems.insert(hoverElem);
                 ImGui::OpenPopup("ctx");
             }
         }
     }
     if (ImGui::BeginPopup("ctx")) {
-        if (ImGui::MenuItem("Ngàm", nullptr, false, !selNodes.empty())) {
-            snapshot();
-            for (int n : selNodes) model.supportFor(n).fix = {true, true, true};
-            changed();
-        }
-        if (ImGui::MenuItem("Gối cố định", nullptr, false, !selNodes.empty())) {
-            snapshot();
-            for (int n : selNodes) model.supportFor(n).fix = {true, true, false};
-            changed();
-        }
-        if (ImGui::MenuItem("Gối di động", nullptr, false, !selNodes.empty())) {
-            snapshot();
-            for (int n : selNodes) model.supportFor(n).fix = {false, true, false};
-            changed();
-        }
-        if (ImGui::MenuItem("Bỏ gối", nullptr, false, !selNodes.empty())) {
-            snapshot();
-            for (int n : selNodes)
-                if (Support* s = model.supportAt(n)) *s = Support{n};
-            model.cleanSupports();
-            changed();
-        }
+        const bool sel = !selNodes.empty() || !selElems.empty();
+        if (!lastCommand.empty() && ImGui::MenuItem(("Lặp lại " + lastCommand).c_str(), "Enter")) startCommand(lastCommand);
         ImGui::Separator();
-        if (ImGui::MenuItem("Xóa", "Delete", false, !selNodes.empty() || !selElems.empty())) deleteSelection();
-        if (ImGui::MenuItem("Vừa khung nhìn", "F")) fitRequested = true;
+        if (ImGui::MenuItem("Xóa", "Delete", false, sel)) startCommand("E");
+        if (ImGui::MenuItem("Di chuyển", "M", false, sel)) startCommand("M");
+        if (ImGui::MenuItem("Sao chép", "CO", false, sel)) startCommand("CO");
+        if (ImGui::MenuItem("Xoay", "RO", false, sel)) startCommand("RO");
+        if (ImGui::MenuItem("Đối xứng", "MI", false, sel)) startCommand("MI");
+        if (ImGui::MenuItem("Chia thanh", "DIV", false, !selElems.empty())) startCommand("DIV");
+        ImGui::Separator();
+        if (ImGui::MenuItem("Ngàm", "NGAM", false, !selNodes.empty())) startCommand("NGAM");
+        if (ImGui::MenuItem("Gối cố định", "KHOP", false, !selNodes.empty())) startCommand("KHOP");
+        if (ImGui::MenuItem("Gối di động", "DIDONG", false, !selNodes.empty())) startCommand("DIDONG");
+        if (ImGui::MenuItem("Tải nút...", "TAINUT", false, !selNodes.empty())) startCommand("TAINUT");
+        if (ImGui::MenuItem("Tải phân bố...", "TAIPB", false, !selElems.empty())) startCommand("TAIPB");
+        ImGui::Separator();
+        if (ImGui::MenuItem("Bỏ chọn tất cả", "Esc", false, sel)) {
+            selNodes.clear();
+            selElems.clear();
+        }
+        if (ImGui::MenuItem("Thuộc tính", "Ctrl+1")) showPropsPanel = true;
+        if (ImGui::MenuItem("Vừa khung nhìn", "Z E")) fitRequested = true;
         ImGui::EndPopup();
     }
 
-    // phím tắt trên canvas
-    if ((hovered || ImGui::IsWindowFocused()) && !io.WantTextInput) {
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
-            if (pendingNode >= 0) pendingNode = -1;
-            else if (tool != Tool::Select) tool = Tool::Select;
-            else {
-                selNodes.clear();
-                selElems.clear();
-            }
+    // ---- dấu bắt điểm
+    if (pointMode && hovered && sp.kind != SnapKind::None && sp.kind != SnapKind::Grid) {
+        const ImVec2 p = cam.toScreen(sp.x, sp.y);
+        const float r = 7;
+        const ImU32 c = P.snap;
+        switch (sp.kind) {
+        case SnapKind::Node: dl->AddRect(p - ImVec2(r, r), p + ImVec2(r, r), c, 0, 0, 2.0f); break;
+        case SnapKind::Mid: dl->AddTriangle(p + ImVec2(0, -r), p + ImVec2(-r, r * 0.8f), p + ImVec2(r, r * 0.8f), c, 2.0f); break;
+        case SnapKind::Intersection:
+            dl->AddLine(p - ImVec2(r, r), p + ImVec2(r, r), c, 2.0f);
+            dl->AddLine(p + ImVec2(-r, r), p + ImVec2(r, -r), c, 2.0f);
+            break;
+        case SnapKind::Perpendicular:
+            dl->AddLine(p + ImVec2(-r, r), p + ImVec2(r, r), c, 2.0f);
+            dl->AddLine(p + ImVec2(-r, r), p + ImVec2(-r, -r), c, 2.0f);
+            dl->AddLine(p + ImVec2(-r, 0), p + ImVec2(0, 0), c, 2.0f);
+            dl->AddLine(p + ImVec2(0, 0), p + ImVec2(0, r), c, 2.0f);
+            break;
+        case SnapKind::Nearest:
+            dl->AddLine(p + ImVec2(-r, -r), p + ImVec2(r, -r), c, 2.0f);
+            dl->AddLine(p + ImVec2(r, -r), p + ImVec2(-r, r), c, 2.0f);
+            dl->AddLine(p + ImVec2(-r, r), p + ImVec2(r, r), c, 2.0f);
+            dl->AddLine(p + ImVec2(r, r), p + ImVec2(-r, -r), c, 2.0f);
+            break;
+        default: break;
         }
-        if (ImGui::IsKeyPressed(ImGuiKey_Delete) || ImGui::IsKeyPressed(ImGuiKey_Backspace)) deleteSelection();
-        if (ImGui::IsKeyPressed(ImGuiKey_F) && !io.KeyCtrl) fitRequested = true;
-        if (ImGui::IsKeyChordPressed(ImGuiMod_Ctrl | ImGuiKey_A)) {
-            for (int i = 0; i < (int)m.nodes.size(); ++i) selNodes.insert(i);
-            for (int i = 0; i < (int)m.elements.size(); ++i) selElems.insert(i);
-        }
+        label(dl, p + ImVec2(12, 12), snapName(sp.kind), P.snap, ImVec2(0, 0), 0.85f);
     }
-    if (tool == Tool::Select) pendingNode = -1;
+
+    // ---- con trỏ chữ thập
+    if (hovered && !ImGui::IsPopupOpen("ctx")) {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_None);
+        const ImVec2 cp = pointMode ? cam.toScreen(sp.x, sp.y) : mp;
+        const ImU32 c = withAlpha(P.crosshair, 200);
+        dl->AddLine(ImVec2(cam.c0.x, cp.y), ImVec2(cam.c1.x, cp.y), withAlpha(P.crosshair, 70), 1.0f);
+        dl->AddLine(ImVec2(cp.x, cam.c0.y), ImVec2(cp.x, cam.c1.y), withAlpha(P.crosshair, 70), 1.0f);
+        dl->AddLine(ImVec2(cp.x - 40, cp.y), ImVec2(cp.x + 40, cp.y), c, 1.0f);
+        dl->AddLine(ImVec2(cp.x, cp.y - 40), ImVec2(cp.x, cp.y + 40), c, 1.0f);
+        if (selectMode) dl->AddRect(cp - ImVec2(5, 5), cp + ImVec2(5, 5), c);
+    }
+
+    // ---- nhập liệu động cạnh con trỏ
+    if (dynInput && hovered && cmd) {
+        std::string t1 = cmd->prompt(*this);
+        std::string t2 = cmdLine.empty() ? "" : "› " + cmdLine;
+        if (hasBase && pointMode) {
+            char b[96];
+            std::snprintf(b, sizeof b, "L = %.3f   ∠ %.1f°", std::hypot(sp.x - bx, sp.y - by),
+                          std::atan2(sp.y - by, sp.x - bx) * 180 / kPi);
+            t2 = t2.empty() ? b : t2 + "   " + b;
+        }
+        const ImVec2 at = mp + ImVec2(22, 22);
+        const ImVec2 s1 = ImGui::CalcTextSize(t1.c_str()), s2 = ImGui::CalcTextSize(t2.c_str());
+        const float w = std::max(s1.x, s2.x) + 12, hh = s1.y + (t2.empty() ? 0 : s2.y) + 8;
+        dl->AddRectFilled(at, at + ImVec2(w, hh), withAlpha(darkTheme ? IM_COL32(20, 24, 30, 255) : IM_COL32(255, 255, 240, 255), 225), 3);
+        dl->AddRect(at, at + ImVec2(w, hh), withAlpha(P.textDim, 160), 3);
+        dl->AddText(at + ImVec2(6, 4), P.textDim, t1.c_str());
+        if (!t2.empty()) dl->AddText(at + ImVec2(6, 4 + s1.y), P.text, t2.c_str());
+    }
 
     // ---- chú giải phổ màu
     if (contourOn) {
@@ -1203,39 +1344,31 @@ void App::viewport() {
         }
     }
 
-    // ---- hệ trục góc màn hình
+    // ---- biểu tượng UCS (góc trái dưới)
     {
-        const ImVec2 o(cam.c0.x + 22, cam.c1.y - 40);
-        arrow(dl, o, o + ImVec2(34, 0), P.axis, 1.6f, 7);
-        arrow(dl, o, o + ImVec2(0, -34), P.axis, 1.6f, 7);
-        dl->AddText(o + ImVec2(38, -8), P.textDim, "X");
-        dl->AddText(o + ImVec2(-4, -52), P.textDim, "Y");
+        const ImVec2 o(cam.c0.x + 26, cam.c1.y - 26);
+        dl->AddLine(o, o + ImVec2(42, 0), P.axisX, 2.0f);
+        dl->AddTriangleFilled(o + ImVec2(48, 0), o + ImVec2(40, -4), o + ImVec2(40, 4), P.axisX);
+        dl->AddLine(o, o + ImVec2(0, -42), P.axisY, 2.0f);
+        dl->AddTriangleFilled(o + ImVec2(0, -48), o + ImVec2(-4, -40), o + ImVec2(4, -40), P.axisY);
+        dl->AddRect(o - ImVec2(4, 4), o + ImVec2(4, 4), P.textDim);
+        dl->AddText(o + ImVec2(52, -8), P.axisX, "X");
+        dl->AddText(o + ImVec2(-4, -66), P.axisY, "Y");
     }
-
-    // ---- thanh trạng thái
-    {
-        char b[256];
-        if (hovered) std::snprintf(b, sizeof b, "x = %.3f   y = %.3f m   |   nút %zu, phần tử %zu", wx, wy,
-                                   m.nodes.size(), m.elements.size());
-        else std::snprintf(b, sizeof b, "nút %zu, phần tử %zu", m.nodes.size(), m.elements.size());
-        std::string status = b;
-        if (drawDeformed) {
-            std::snprintf(b, sizeof b, "   |   phóng đại biến dạng ×%.0f", S);
-            status += b;
-        }
-        const float y = cam.c1.y - 20;
-        label(dl, ImVec2(cam.c0.x + 80, y + 9), status, P.textDim, ImVec2(0, 0.5f), 0.85f);
-        if (!result.ok && !result.error.empty())
-            label(dl, ImVec2(cam.c0.x + 10, cam.c0.y + 12), "⚠ " + result.error, IM_COL32(200, 30, 30, 255),
-                  ImVec2(0, 0.5f), 0.9f);
-        else if (needAnalyze && !autoAnalyze)
-            label(dl, ImVec2(cam.c0.x + 10, cam.c0.y + 12), "Mô hình đã thay đổi — nhấn F5 để tính lại",
-                  IM_COL32(200, 120, 0, 255), ImVec2(0, 0.5f), 0.9f);
+    if (!result.ok && !result.error.empty())
+        label(dl, ImVec2(cam.c0.x + 10, cam.c0.y + 12), "⚠ " + result.error, IM_COL32(230, 60, 50, 255), ImVec2(0, 0.5f), 0.9f);
+    else if (needAnalyze && !autoAnalyze)
+        label(dl, ImVec2(cam.c0.x + 10, cam.c0.y + 12), "Mô hình đã thay đổi — nhấn F5 để tính lại", IM_COL32(220, 140, 0, 255),
+              ImVec2(0, 0.5f), 0.9f);
+    if (drawDeformed) {
+        char b[64];
+        std::snprintf(b, sizeof b, "phóng đại biến dạng ×%.0f", S);
+        label(dl, ImVec2(cam.c1.x - 10, cam.c1.y - 12), b, P.textDim, ImVec2(1, 0.5f), 0.85f);
     }
     dl->PopClipRect();
 
     // ---- chú thích khi rê chuột
-    if (hovered && !g_in.boxing && !ImGui::IsMouseDragging(ImGuiMouseButton_Right)) {
+    if (hovered && !cmd && !g_in.boxing && !ImGui::IsMouseDragging(ImGuiMouseButton_Right)) {
         if (hoverNode >= 0) {
             ImGui::BeginTooltip();
             const Node& n = m.nodes[hoverNode];

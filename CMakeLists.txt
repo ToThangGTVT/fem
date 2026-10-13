@@ -86,6 +86,8 @@ if(FEM_BUILD_GUI)
     src/app/App.cpp
     src/app/Panels.cpp
     src/app/View.cpp
+    src/app/Commands.cpp
+    src/app/Ribbon.cpp
   )
   target_link_libraries(fem2d PRIVATE femcore imgui)
   if(MSVC)

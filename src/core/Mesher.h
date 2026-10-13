@@ -14,6 +14,13 @@ std::vector<int> meshRectangle(Model& m, double x0, double y0, double w, double 
 // Chia thanh e thành n đoạn bằng nhau; tải trên thanh được phân phối lại cho các đoạn.
 void subdivideBar(Model& m, int e, int n);
 
+// Cắt thanh e tại vị trí t ∈ (0, 1) tính từ đầu i; tải trên thanh được chia lại. Trả về chỉ số nút mới.
+int splitBarAt(Model& m, int e, double t);
+
+// Gộp các nút trùng nhau (khoảng cách ≤ tol): nối lại phần tử, gối, tải; bỏ phần tử suy biến hoặc trùng lặp.
+// Trả về số nút đã gộp.
+int mergeNodes(Model& m, double tol);
+
 // Tải phân bố trên cạnh biên của phần tử phẳng, quy về lực nút tương đương.
 struct EdgeLoadSpec {
     bool pressure = false;  // false: lực qx, qy (kN/m chiều dài cạnh); true: áp lực pháp tuyến

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <map>
 #include <set>
 
@@ -189,4 +190,114 @@ int applyEdgeLoad(Model& m, int caseIndex, const std::vector<int>& nodes, const 
     return used;
 }
 
+int splitBarAt(Model& m, int e, double t) {
+    if (e < 0 || e >= (int)m.elements.size() || !m.elements[e].isBar() || t <= 0 || t >= 1) return -1;
+    const Element orig = m.elements[e];
+    const Node a = m.nodes[orig.n[0]], b = m.nodes[orig.n[1]];
+    const double L = std::hypot(b.x - a.x, b.y - a.y), cut = t * L;
+    m.nodes.push_back({a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t});
+    const int nn = (int)m.nodes.size() - 1;
+    Element p1 = orig, p2 = orig;
+    p1.n[1] = nn;
+    p1.hingeJ = false;
+    p2.n[0] = nn;
+    p2.hingeI = false;
+    m.elements[e] = p1;
+    m.elements.push_back(p2);
+    const int e2 = (int)m.elements.size() - 1;
+    for (auto& lc : m.cases) {
+        std::vector<ElemLoad> added;
+        for (auto& l : lc.elem) {
+            if (l.elem != e) continue;
+            switch (l.kind) {
+            case ElemLoadKind::Distributed: {
+                const double qt = l.q1 + (l.q2 - l.q1) * t;
+                ElemLoad r = l;
+                r.elem = e2;
+                r.q1 = qt;
+                l.q2 = qt;
+                added.push_back(r);
+                break;
+            }
+            case ElemLoadKind::Point:
+            case ElemLoadKind::Moment:
+                if (l.a > cut) {
+                    l.elem = e2;
+                    l.a -= cut;
+                }
+                break;
+            case ElemLoadKind::Temperature: {
+                ElemLoad r = l;
+                r.elem = e2;
+                added.push_back(r);
+                break;
+            }
+            }
+        }
+        lc.elem.insert(lc.elem.end(), added.begin(), added.end());
+    }
+    return nn;
+}
+
+int mergeNodes(Model& m, double tol) {
+    const int nn = (int)m.nodes.size();
+    std::vector<int> order(nn), rep(nn);
+    for (int i = 0; i < nn; ++i) order[i] = rep[i] = i;
+    std::function<int(int)> find = [&](int i) { return rep[i] == i ? i : (rep[i] = find(rep[i])); };
+    std::sort(order.begin(), order.end(), [&](int a, int b) { return m.nodes[a].x < m.nodes[b].x; });
+    for (int ia = 0; ia < nn; ++ia) {
+        const int a = order[ia];
+        for (int ib = ia + 1; ib < nn; ++ib) {
+            const int b = order[ib];
+            if (m.nodes[b].x - m.nodes[a].x > tol) break;
+            if (std::abs(m.nodes[b].y - m.nodes[a].y) > tol) continue;
+            const int ra = find(a), rb = find(b);
+            if (ra != rb) rep[std::max(ra, rb)] = std::min(ra, rb); // giữ nút có chỉ số nhỏ hơn
+        }
+    }
+    int merged = 0;
+    for (int i = 0; i < nn; ++i) {
+        rep[i] = find(i);
+        if (rep[i] != i) ++merged;
+    }
+    if (!merged) return 0;
+    for (auto& el : m.elements)
+        for (int k = 0; k < el.nodeCount(); ++k) el.n[k] = rep[el.n[k]];
+    // gối: gộp điều kiện biên vào nút giữ lại
+    for (auto& s : m.supports) {
+        const int r = rep[s.node];
+        if (r == s.node) continue;
+        Support& t = m.supportFor(r);
+        for (int c = 0; c < 3; ++c) {
+            t.fix[c] = t.fix[c] || s.fix[c];
+            t.k[c] = std::max(t.k[c], s.k[c]);
+        }
+    }
+    for (auto& lc : m.cases) {
+        for (auto& l : lc.nodal) l.node = rep[l.node];
+        for (auto& d : lc.disp) d.node = rep[d.node];
+    }
+    // phần tử suy biến (nút lặp) hoặc trùng lặp
+    std::vector<int> dead;
+    std::set<std::vector<int>> seen;
+    for (size_t e = 0; e < m.elements.size(); ++e) {
+        const Element& el = m.elements[e];
+        std::vector<int> key(el.n.begin(), el.n.begin() + el.nodeCount());
+        std::sort(key.begin(), key.end());
+        const bool degenerate = std::adjacent_find(key.begin(), key.end()) != key.end();
+        key.push_back((int)el.type);
+        if (degenerate || !seen.insert(key).second) dead.push_back((int)e);
+    }
+    m.removeElements(dead);
+    std::vector<int> drop;
+    for (int i = 0; i < nn; ++i)
+        if (rep[i] != i) drop.push_back(i);
+    m.supports.erase(std::remove_if(m.supports.begin(), m.supports.end(),
+                                    [&](const Support& s) { return rep[s.node] != s.node; }),
+                     m.supports.end());
+    m.removeNodes(drop);
+    return merged;
+}
+
 } // namespace fem
+

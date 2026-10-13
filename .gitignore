@@ -1,4 +1,4 @@
 build/
 build-*/
-fem2d_layout.ini
+fem2d_layout*.ini
 .DS_Store

@@ -768,10 +768,13 @@ void App::propsPanel() {
                 if (ImGui::Selectable(secs[i].c_str(), i == curSec)) curSec = i;
             ImGui::EndCombo();
         }
-        ImGui::SeparatorText("Thao tác chuột");
-        for (const char* t : {"Lăn chuột: phóng to/thu nhỏ; chuột phải/giữa kéo: di chuyển.",
-                              "Chuột phải (không kéo): menu nhanh / dừng vẽ.",
-                              "Delete: xóa; Esc: bỏ chọn; F: vừa khung; F5: tính; Ctrl+Z: hoàn tác."}) {
+        ImGui::SeparatorText("Thao tác");
+        for (const char* t : {"Gõ lệnh ở bất cứ đâu: L (thanh), DAN, PO, E, M, CO, RO, MI, DIV, NGAM, TAIPB... Gõ ? để xem tất cả.",
+                              "Enter / Space / chuột phải: kết thúc hoặc lặp lại lệnh; Esc: hủy.",
+                              "Tọa độ: x,y  @dx,dy  @d<góc, hoặc gõ khoảng cách theo hướng con trỏ.",
+                              "Chọn: nhấp để thêm, Shift+nhấp để bỏ; kéo trái→phải: cửa sổ, phải→trái: cắt ngang.",
+                              "Nhấp grip (ô vuông xanh) để kéo nút. Lăn chuột: zoom; kéo chuột giữa/phải: pan; nhấp đúp chuột giữa: vừa khung.",
+                              "F3 OSNAP, F7 lưới, F8 ORTHO, F9 SNAP, F12 DYN, Ctrl+1 thuộc tính, F5 tính."}) {
             ImGui::Bullet();
             ImGui::TextWrapped("%s", t);
         }

@@ -55,8 +55,10 @@ và/hoặc quy từ tải trọng thẳng đứng của một bộ tải (m = |F
 **Tải trên cạnh phần tử phẳng**: lực phân bố qx, qy hoặc áp lực pháp tuyến biến đổi tuyến tính p = p0 + k·y
 (ví dụ áp lực thủy tĩnh), quy về lực nút tương đương.
 
-**Giao diện**: vẽ nút/thanh bằng chuột (bắt lưới, bắt nút), chọn bằng khung, bảng nhập liệu, hoàn tác/làm lại,
-tự động tính lại khi sửa, bộ tạo nhanh khung nhiều tầng, dàn (Pratt, Howe, Warren, tam giác), lưới phần tử phẳng.
+**Giao diện kiểu AutoCAD** (sáng/tối): ribbon có biểu tượng, dòng lệnh, thanh trạng thái GRID/SNAP/ORTHO/OSNAP/DYN,
+con trỏ chữ thập, bắt điểm (nút, trung điểm, giao điểm, vuông góc, gần nhất — vẽ vào giữa thanh sẽ tự cắt thanh để nối),
+chọn cửa sổ (trái→phải) / cắt ngang (phải→trái), grip để kéo nút, nhập liệu động cạnh con trỏ, bảng thuộc tính,
+hoàn tác/làm lại, tự động tính lại khi sửa, bộ tạo nhanh khung nhiều tầng, dàn, lưới phần tử phẳng.
 Thư viện vật liệu TCVN 5574:2018, TCVN 5575:2012 và thép hình ГОСТ 8239-89 (chữ I), ГОСТ 8240-97 (chữ [).
 
 ## Quy ước
@@ -66,16 +68,32 @@ Thư viện vật liệu TCVN 5574:2018, TCVN 5575:2012 và thép hình ГОСТ
 - Trục cục bộ thanh: x từ nút i → j, y quay x ngược chiều kim đồng hồ 90°.
 - N > 0 kéo; Q > 0 làm phần thanh quay thuận chiều kim đồng hồ; M > 0 căng thớ dưới (phía −y cục bộ).
 
-## Thao tác
+## Thao tác (giống AutoCAD)
 
-| Thao tác | Cách làm |
+Gõ lệnh ở bất cứ đâu, không cần nhấp vào dòng lệnh. **Enter / Space / chuột phải** để kết thúc hoặc lặp lại lệnh,
+**Esc** để hủy. Lệnh không phân biệt hoa thường; gõ `?` để xem danh sách.
+
+| Lệnh | Chức năng |
 |---|---|
-| Phóng to/thu nhỏ | lăn chuột (quanh con trỏ) |
-| Di chuyển khung nhìn | kéo chuột phải hoặc chuột giữa |
-| Vẽ thanh | chọn "+ Thanh khung"/"+ Thanh dàn", nhấp liên tiếp; chuột phải hoặc Esc để dừng |
-| Chọn | nhấp, hoặc kéo khung; Shift để chọn thêm |
-| Gán gối, tải | chọn nút/thanh → panel **Thuộc tính**; hoặc chuột phải → menu nhanh |
-| Phím tắt | Ctrl+Z/Ctrl+Y hoàn tác/làm lại, Delete xóa, F vừa khung, F5 tính, Ctrl+S lưu |
+| `L` / `DAN` / `PO` | vẽ thanh khung / thanh dàn / nút |
+| `E`, `M`, `CO`, `RO`, `MI` | xóa, di chuyển, sao chép, xoay, đối xứng |
+| `DIV`, `GOP` | chia thanh thành n đoạn, gộp nút trùng |
+| `NGAM`, `KHOP`, `DIDONG`, `DIDONGX`, `NGAMTRUOT`, `BOGOI` | gối tựa |
+| `TAINUT`, `TAIPB`, `TAITT`, `MOMEN` | tải nút, tải phân bố, lực tập trung, mômen |
+| `TINH` (F5), `ONDINH`, `DAODONG` | tính tĩnh, ổn định, dao động riêng |
+| `DI`, `ID`, `LI`, `Z` | đo khoảng cách, tọa độ, liệt kê, zoom (`E` toàn bộ, `W` cửa sổ) |
+| `U`, `REDO` | hoàn tác, làm lại |
+
+Nhập tọa độ: `x,y` (tuyệt đối), `@dx,dy` (tương đối), `@d<góc` (cực), hoặc gõ một số để đi theo hướng con trỏ.
+
+| Phím / chuột | Chức năng |
+|---|---|
+| F3 / F7 / F8 / F9 / F12 | OSNAP / lưới / ORTHO / SNAP / nhập liệu động |
+| F2 | mở rộng lịch sử dòng lệnh |
+| Ctrl+1 | bảng thuộc tính |
+| Ctrl+Z / Ctrl+Y, Ctrl+S, Delete | hoàn tác / làm lại, lưu, xóa |
+| Lăn chuột | zoom quanh con trỏ; kéo chuột giữa/phải: pan; nhấp đúp chuột giữa: vừa khung |
+| Nhấp / Shift+nhấp | thêm / bỏ đối tượng khỏi tập chọn; nhấp vào grip để kéo nút |
 
 ## Định dạng file `.fem`
 
@@ -107,12 +125,12 @@ src/core/   lõi tính toán, không phụ thuộc giao diện
   Library       vật liệu, thép hình
   ModelIO       đọc/ghi .fem, báo cáo
   Examples      bài toán mẫu
-src/app/    giao diện SDL3 + ImGui (View: vẽ sơ đồ; Panels: bảng nhập liệu, kết quả)
+src/app/    giao diện SDL3 + ImGui (Ribbon: ribbon, dòng lệnh, chủ đề; Commands: các lệnh; View: vùng vẽ; Panels: bảng)
 tests/      kiểm chứng với lời giải giải tích
 ```
 
 Chế độ dành cho phát triển: `fem2d --shot ảnh.bmp <số ví dụ> <chế độ xem> [đại lượng màu] [e | m<thanh>:<x>]` chụp màn hình rồi thoát;
-`fem2d --smoke` giả lập thao tác chuột để kiểm tra công cụ vẽ.
+`fem2d --smoke` giả lập gõ lệnh và thao tác chuột như người dùng để kiểm tra giao diện.
 
 ## Tài liệu tham khảo
 
