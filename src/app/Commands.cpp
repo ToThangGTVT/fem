@@ -49,7 +49,9 @@ int numbers(const std::string& s, double* out, int maxN) {
     return n;
 }
 
+#ifdef __GNUC__
 std::string fmt(const char* f, ...) __attribute__((format(printf, 1, 2)));
+#endif
 std::string fmt(const char* f, ...) {
     char b[512];
     va_list ap;

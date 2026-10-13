@@ -14,7 +14,9 @@ namespace fem {
 
 namespace {
 
+#ifdef __GNUC__
 std::string fmt(const char* f, ...) __attribute__((format(printf, 1, 2)));
+#endif
 std::string fmt(const char* f, ...) {
     char buf[512];
     va_list ap;
