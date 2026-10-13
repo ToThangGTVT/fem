@@ -4,6 +4,25 @@ Chương trình C++17 tính kết cấu 2D theo phương pháp chuyển vị, gi
 Các phần tử, quy ước dấu và cách trình bày biểu đồ theo giáo trình Cơ học kết cấu Việt Nam / Liên Xô
 (biểu đồ M vẽ về phía thớ căng, có gạch tung độ). Phần 3D sẽ bổ sung sau.
 
+## Hình ảnh
+
+Giao diện kiểu AutoCAD (ribbon, dòng lệnh, thanh trạng thái), hai chủ đề tối/sáng.
+
+| | |
+|---|---|
+| ![Biểu đồ mômen khung 2 tầng 2 nhịp](docs/images/khung_M.png) | ![Lực dọc dàn cầu, giao diện sáng](docs/images/dan_N_sang.png) |
+| Biểu đồ M vẽ về phía thớ căng, phản lực | Dàn: thanh kéo (xanh) / nén (đỏ), giao diện sáng |
+| ![Đường ảnh hưởng và xếp xe H30](docs/images/duong_anh_huong.png) | ![Biểu đồ bao mômen dầm liên tục](docs/images/bieu_do_bao.png) |
+| Đường ảnh hưởng M, xếp đoàn xe H30 bất lợi | Biểu đồ bao M qua các tổ hợp hoạt tải cách nhịp |
+| ![Phương pháp lực](docs/images/phuong_phap_luc.png) | ![Cấu tạo hình học](docs/images/cau_tao_hinh_hoc.png) |
+| Phương pháp lực: hệ cơ bản, biểu đồ đơn vị M̄1, hệ phương trình chính tắc | Phân tích cấu tạo hình học: W, bậc siêu tĩnh |
+| ![Thiết kế tiết diện chữ T](docs/images/thiet_ke_tiet_dien.png) | ![Ứng suất trên tiết diện, vòng Mohr](docs/images/ung_suat_tiet_dien.png) |
+| Đặc trưng hình học, trục chính, lõi tiết diện | σ(y), τ(y), vòng tròn Mohr, thuyết bền 3, 4 |
+| ![Dạng mất ổn định](docs/images/on_dinh.png) | ![Dạng dao động riêng](docs/images/dao_dong.png) |
+| Ổn định: λcr, hệ số chiều dài tính toán μ | Dao động riêng: tần số, chu kỳ, dạng dao động |
+| ![Ứng suất σx dầm-tường](docs/images/dam_tuong_sigma_x.png) | |
+| Dầm-tường (балка-стенка): phổ màu σx, phần tử Q4 | |
+
 ## Biên dịch
 
 Yêu cầu: CMake ≥ 3.20, trình biên dịch C++17, SDL3 (nếu hệ thống không có, CMake sẽ tự tải mã nguồn).
@@ -159,7 +178,7 @@ src/app/    giao diện SDL3 + ImGui (Ribbon: ribbon, dòng lệnh, chủ đề;
 tests/      kiểm chứng với lời giải giải tích
 ```
 
-Chế độ dành cho phát triển: `fem2d --shot ảnh.bmp <số ví dụ> <chế độ xem> [đại lượng màu] [e | m<thanh>:<x>]` chụp màn hình rồi thoát;
+Các ảnh trên được chụp tự động bằng chế độ dành cho phát triển: `fem2d --shot ảnh.bmp <số ví dụ> <chế độ xem> [đại lượng màu] [e | m<thanh>:<x>]` chụp màn hình rồi thoát;
 `fem2d --smoke` giả lập gõ lệnh và thao tác chuột như người dùng để kiểm tra giao diện.
 
 ## Tài liệu tham khảo
