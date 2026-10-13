@@ -649,7 +649,7 @@ void App::appMenu() {
         applyTheme();
     }
     ImGui::Separator();
-    if (ImGui::MenuItem("Giới thiệu & quy ước")) showAbout = true;
+    if (ImGui::MenuItem("Hướng dẫn", "F1")) showGuide = true;
     if (ImGui::MenuItem("Thoát")) confirmDiscard(Pending::Quit);
     ImGui::EndPopup();
 }
@@ -1048,10 +1048,7 @@ void App::ribbon() {
         endPanel("Giao diện");
         beginPanel();
         if (bigButton("Vừa\nkhung", Icon::ZoomExt, "Zoom toàn bộ")) fitRequested = true;
-        if (bigButton("Trợ giúp", Icon::Help, "Quy ước và danh sách lệnh")) {
-            showAbout = true;
-            startCommand("?");
-        }
+        if (bigButton("Hướng\ndẫn", Icon::Help, "Cách thao tác, lệnh, phím tắt, quy ước (F1)", showGuide)) showGuide = !showGuide;
         endPanel("Điều hướng");
         break;
     }

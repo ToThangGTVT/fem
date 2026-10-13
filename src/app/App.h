@@ -176,7 +176,7 @@ struct App {
 
     // ---- cửa sổ phụ
     bool showModelPanel = true, showPropsPanel = true, showResultPanel = true, showLogPanel = false;
-    bool showMeshDialog = false, showFrameGen = false, showTrussGen = false, showAbout = false, showDemo = false;
+    bool showMeshDialog = false, showFrameGen = false, showTrussGen = false, showGuide = true, showDemo = false;
     bool resetLayout = true;
 
     std::vector<std::string> log;
@@ -246,7 +246,7 @@ struct App {
     void meshDialog();
     void frameGenDialog();
     void trussGenDialog();
-    void aboutDialog();
+    void guidePanel();
     void eigenDialog();
     void kinematicsDialog();
     void sectionDesigner();

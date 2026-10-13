@@ -103,6 +103,7 @@ if(FEM_BUILD_GUI)
     src/app/Textbook.cpp
     src/app/DynamicsUI.cpp
     src/app/DesignUI.cpp
+    src/app/Guide.cpp
   )
   target_link_libraries(fem2d PRIVATE femcore imgui)
   if(MSVC)

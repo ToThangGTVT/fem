@@ -466,7 +466,6 @@ void App::modelPanel() {
         }
         // ------------------------------------------------ gối
         if (ImGui::BeginTabItem("Gối tựa")) {
-            ImGui::TextWrapped("Chọn nút trên sơ đồ rồi dùng panel Thuộc tính để gán gối. Lò xo: kN/m, kNm/rad.");
             int del = -1;
             if (ImGui::BeginTable("sups", 8, tableFlags())) {
                 ImGui::TableSetupScrollFreeze(0, 1);
@@ -688,7 +687,6 @@ void App::modelPanel() {
                 if (delD >= 0) lc.disp.erase(lc.disp.begin() + delD);
                 changed();
             }
-            ImGui::TextDisabled("Thêm tải: chọn nút/thanh trên sơ đồ → panel Thuộc tính.");
             ImGui::EndTabItem();
         }
         // ------------------------------------------------ tổ hợp
@@ -784,7 +782,9 @@ void App::propsPanel() {
     LoadCase& lc = m.cases[activeCase];
 
     if (selNodes.empty() && selElems.empty()) {
-        ImGui::TextWrapped("Chưa chọn đối tượng. Nhấp hoặc kéo khung trên sơ đồ để chọn nút / phần tử.");
+        ImGui::TextDisabled("Chưa chọn đối tượng.");
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Hướng dẫn (F1)")) showGuide = true;
         ImGui::SeparatorText("Thanh vẽ mới");
         ImGui::SetNextItemWidth(-90);
         if (ImGui::BeginCombo("Vật liệu", curMat < (int)mats.size() ? mats[curMat].c_str() : "—")) {
@@ -797,16 +797,6 @@ void App::propsPanel() {
             for (int i = 0; i < (int)secs.size(); ++i)
                 if (ImGui::Selectable(secs[i].c_str(), i == curSec)) curSec = i;
             ImGui::EndCombo();
-        }
-        ImGui::SeparatorText("Thao tác");
-        for (const char* t : {"Gõ lệnh ở bất cứ đâu: L (thanh), DAN, PO, E, M, CO, RO, MI, DIV, NGAM, TAIPB... Gõ ? để xem tất cả.",
-                              "Enter / Space / chuột phải: kết thúc hoặc lặp lại lệnh; Esc: hủy.",
-                              "Tọa độ: x,y  @dx,dy  @d<góc, hoặc gõ khoảng cách theo hướng con trỏ.",
-                              "Chọn: nhấp để thêm, Shift+nhấp để bỏ; kéo trái→phải: cửa sổ, phải→trái: cắt ngang.",
-                              "Nhấp grip (ô vuông xanh) để kéo nút. Lăn chuột: zoom; kéo chuột giữa/phải: pan; nhấp đúp chuột giữa: vừa khung.",
-                              "F3 OSNAP, F7 lưới, F8 ORTHO, F9 SNAP, F12 DYN, Ctrl+1 thuộc tính, F5 tính."}) {
-            ImGui::Bullet();
-            ImGui::TextWrapped("%s", t);
         }
         ImGui::End();
         return;
@@ -1833,33 +1823,6 @@ void App::trussGenDialog() {
         view = ResultView::N;
         changed();
     }
-    ImGui::End();
-}
-
-void App::aboutDialog() {
-    ImGui::SetNextWindowSize(ImVec2(560, 0), ImGuiCond_FirstUseEver);
-    if (!ImGui::Begin("Giới thiệu & quy ước", &showAbout)) {
-        ImGui::End();
-        return;
-    }
-    ImGui::TextWrapped("FEM2D — tính toán kết cấu phẳng bằng phương pháp phần tử hữu hạn (phương pháp chuyển vị).");
-    ImGui::SeparatorText("Đơn vị");
-    ImGui::BulletText("Lực kN, chiều dài m, mômen kNm, E kN/m², ứng suất hiển thị MPa, chuyển vị mm.");
-    ImGui::SeparatorText("Hệ tọa độ & quy ước dấu");
-    ImGui::BulletText("Trục X sang phải, Y hướng lên; mômen, góc xoay dương ngược chiều kim đồng hồ.");
-    ImGui::BulletText("Trục cục bộ thanh: x từ nút i đến j, y quay x ngược chiều kim đồng hồ 90°.");
-    ImGui::BulletText("N > 0: kéo. Q > 0: làm phần thanh quay thuận chiều kim đồng hồ.");
-    ImGui::BulletText("M > 0: căng thớ dưới (phía −y cục bộ). Biểu đồ M vẽ về phía thớ căng.");
-    ImGui::SeparatorText("Phần tử");
-    ImGui::BulletText("Thanh dàn: chỉ chịu kéo nén. Tải trong nhịp quy về nút như dầm đơn giản.");
-    ImGui::BulletText("Thanh khung Euler–Bernoulli, khớp đầu thanh, nền Winkler, tải nhiệt độ.");
-    ImGui::BulletText("Tam giác biến dạng hằng (CST), tứ giác Q4 đẳng tham số (tùy chọn mode QM6).");
-    ImGui::SeparatorText("Tài liệu tham khảo");
-    ImGui::BulletText("Lều Thọ Trình — Cơ học kết cấu (tập 1, 2).");
-    ImGui::BulletText("Дарков А.В., Шапошников Н.Н. — Строительная механика.");
-    ImGui::BulletText("Смирнов А.Ф. и др. — Строительная механика. Стержневые системы.");
-    ImGui::BulletText("Варвак П.М. — Метод конечных элементов; Zienkiewicz — The Finite Element Method.");
-    ImGui::BulletText("TCVN 5574:2018 (bê tông), TCVN 5575:2012 (thép), ГОСТ 8239-89, ГОСТ 8240-97.");
     ImGui::End();
 }
 
