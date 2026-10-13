@@ -29,8 +29,15 @@ Giao diện kiểu AutoCAD (ribbon, dòng lệnh, thanh trạng thái), hai ch�
 
 ## Tải về
 
-Bản dựng sẵn cho Windows x64, Linux x64 và macOS (universal: Apple Silicon + Intel) ở trang
-[Releases](https://github.com/ToThangGTVT/fem/releases). GitHub Actions build cả ba nền tảng ở mỗi lần push;
+Bản dựng sẵn ở trang [Releases](https://github.com/ToThangGTVT/fem/releases), mỗi nền tảng hai kiến trúc:
+
+| | x64 (Intel/AMD) | ARM64 |
+|---|---|---|
+| Windows | `fem2d-windows-x64.zip` | `fem2d-windows-arm64.zip` (Snapdragon) |
+| Linux | `fem2d-linux-x64.tar.gz` | `fem2d-linux-arm64.tar.gz` |
+| macOS | `fem2d-macos-x64.tar.gz` (Intel, ≥ 10.15) | `fem2d-macos-arm64.tar.gz` (Apple Silicon, ≥ 11) |
+
+GitHub Actions build và chạy kiểm tra trên máy thật của từng kiến trúc ở mỗi lần push;
 đẩy tag `v*` (ví dụ `v1.0.0`) sẽ tự tạo bản phát hành kèm các gói.
 
 Trên macOS, bản tải về chưa ký số; nếu bị Gatekeeper chặn, chạy `xattr -dr com.apple.quarantine fem2d`.

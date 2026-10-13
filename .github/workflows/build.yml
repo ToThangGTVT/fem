@@ -18,19 +18,31 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # CRT tĩnh: chạy được không cần cài VC++ Redistributable
           - name: Windows x64
             os: windows-latest
             artifact: fem2d-windows-x64
-            # CRT tĩnh: chạy được không cần cài VC++ Redistributable
-            cmake_args: -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+            cmake_args: -A x64 -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+          - name: Windows ARM64
+            os: windows-11-arm
+            artifact: fem2d-windows-arm64
+            cmake_args: -A ARM64 -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
           - name: Linux x64
             os: ubuntu-24.04
             artifact: fem2d-linux-x64
             cmake_args: -G Ninja
-          - name: macOS universal
-            os: macos-latest
-            artifact: fem2d-macos-universal
-            cmake_args: -G Ninja "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+          - name: Linux ARM64
+            os: ubuntu-24.04-arm
+            artifact: fem2d-linux-arm64
+            cmake_args: -G Ninja
+          - name: macOS ARM64
+            os: macos-15
+            artifact: fem2d-macos-arm64
+            cmake_args: -G Ninja -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+          - name: macOS x64
+            os: macos-15-intel
+            artifact: fem2d-macos-x64
+            cmake_args: -G Ninja -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=10.15
     defaults:
       run:
         shell: bash
@@ -79,7 +91,7 @@ jobs:
           cp -r examples README.md "$dir/"
           cd dist
           if [ "$RUNNER_OS" = "Windows" ]; then
-            7z a "${{ matrix.artifact }}.zip" "${{ matrix.artifact }}"
+            pwsh -NoProfile -Command "Compress-Archive -Path '${{ matrix.artifact }}' -DestinationPath '${{ matrix.artifact }}.zip'"
           else
             tar czf "${{ matrix.artifact }}.tar.gz" "${{ matrix.artifact }}"
           fi
