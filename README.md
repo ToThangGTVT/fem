@@ -67,6 +67,15 @@ có lỗ → A, trọng tâm, Jx, Jy, Jxy, mômen quán tính chính và góc tr
 **Ứng suất trên tiết diện** (lệnh `USTD`): biểu đồ σ(y) = N/A − M·y/J, τ(y) = Q·S(y)/(J·b(y)), vòng tròn Mohr,
 ứng suất chính và phương chính, kiểm tra theo thuyết bền 3 (Tresca) và 4 (von Mises).
 
+**Lời giải theo giáo trình**:
+- **Phương pháp lực** từng bước (lệnh `PPL`): bậc siêu tĩnh, hệ cơ bản (tự chọn ẩn thừa, ưu tiên phản lực gối),
+  biểu đồ đơn vị M̄i và M⁰P vẽ trên sơ đồ, hệ số δik, ΔiP bằng nhân biểu đồ, hệ phương trình chính tắc, nghiệm,
+  biểu đồ cuối cùng, đối chiếu với lời giải phần tử hữu hạn.
+- **Chuyển vị theo Maxwell–Mohr**: biểu đồ do lực đơn vị trên hệ cơ bản nhân với biểu đồ cuối cùng.
+- **Phương pháp chuyển vị dạng ma trận** (lệnh `PPCV`): ma trận độ cứng phần tử cục bộ và tổng thể, K, P, Z.
+- **Xếp đoàn tải bất lợi** trên đường ảnh hưởng: xe H30, HL-93 (xe tải, xe hai trục, tải làn), НК-80 hoặc tự nhập.
+- **Vòm** parabol / cung tròn, hai khớp / ba khớp / ngàm (lệnh `VOM`); **thanh vút** (tiết diện thay đổi, lệnh `VUT`).
+
 **Tải trên cạnh phần tử phẳng**: lực phân bố qx, qy hoặc áp lực pháp tuyến biến đổi tuyến tính p = p0 + k·y
 (ví dụ áp lực thủy tĩnh), quy về lực nút tương đương.
 
@@ -98,6 +107,7 @@ Gõ lệnh ở bất cứ đâu, không cần nhấp vào dòng lệnh. **Enter 
 | `TINH` (F5), `PDELTA`, `CTHH` | tính tĩnh, bật/tắt P-Δ, cấu tạo hình học |
 | `ONDINH`, `DAODONG` | ổn định, dao động riêng |
 | `TIETDIEN`, `USTD` | thiết kế tiết diện, ứng suất trên tiết diện |
+| `PPL`, `PPCV`, `VOM`, `VUT` | phương pháp lực, phương pháp chuyển vị ma trận, tạo vòm, thanh vút |
 | `DI`, `ID`, `LI`, `Z` | đo khoảng cách, tọa độ, liệt kê, zoom (`E` toàn bộ, `W` cửa sổ) |
 | `U`, `REDO` | hoàn tác, làm lại |
 
@@ -140,6 +150,7 @@ src/core/   lõi tính toán, không phụ thuộc giao diện
   Eigen         ổn định, dao động riêng (Householder + QL cho ma trận đối xứng)
   Kinematics    phân tích cấu tạo hình học (ma trận cân bằng, hạng, không gian rỗng)
   SectionGeom   đặc trưng hình học tiết diện, lõi tiết diện, mômen tĩnh và bề rộng tại cao độ
+  ForceMethod   phương pháp lực, Maxwell–Mohr, phương pháp chuyển vị dạng ma trận
   Mesher        tạo lưới, chia thanh
   Library       vật liệu, thép hình
   ModelIO       đọc/ghi .fem, báo cáo

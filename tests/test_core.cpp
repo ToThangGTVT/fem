@@ -7,6 +7,7 @@
 #include "core/Analysis.h"
 #include "core/Eigen.h"
 #include "core/Examples.h"
+#include "core/ForceMethod.h"
 #include "core/Kinematics.h"
 #include "core/SectionGeom.h"
 #include "core/Library.h"
@@ -1018,7 +1019,154 @@ static void testSectionGeom() {
     }
 }
 
+static void testForceMethod() {
+    std::puts("Phương pháp lực, Maxwell–Mohr, phương pháp chuyển vị dạng ma trận");
+    auto ex = [](const char* name) {
+        for (const auto& e : examples())
+            if (std::string(e.name) == name) return e.build();
+        return Model{};
+    };
+    {
+        const double L = 8, q = 12;
+        Model m = beamModel(L, 1, 3e7, 0.18, 0.0054);
+        fix(m, 0, true, true, true);
+        fix(m, 1, true, true, true);
+        m.cases[0].elem.push_back(dload(0, -q, -q));
+        const auto f = forceMethod(m, 0);
+        check(f.ok && f.n == 3, "dầm 2 đầu ngàm: n = 3", f.n, 3);
+        if (f.ok) {
+            near("M đầu = −qL²/12", f.final.bars[0].M.front(), -q * L * L / 12, 1e-6);
+            near("M giữa = qL²/24", barValueAt(f.final.bars[0], BarQty::M, L / 2), q * L * L / 24, 1e-6);
+        }
+    }
+    struct C {
+        const char* name;
+        int set, n;
+    } cases[] = {{"Khung 1 tầng 1 nhịp", 0, 3}, {"Khung 1 tầng 1 nhịp", 1, 3}, {"Khung 2 tầng 2 nhịp", 0, 12},
+                 {"Dầm liên tục 3 nhịp", 6, 2}, {"Dầm tĩnh định nhiều nhịp", 0, 0}, {"Khung ba khớp", 0, 0}, {"Dàn cầu", 0, 0}};
+    for (const auto& c : cases) {
+        const Model m = ex(c.name);
+        const auto f = forceMethod(m, c.set);
+        double mmax = 1e-9;
+        if (f.ok)
+            for (const auto& b : f.final.bars)
+                for (double v : b.M) mmax = std::max(mmax, std::abs(v));
+        check(f.ok && f.n == c.n && f.maxDiffM < 1e-4 * mmax + 1e-6,
+              (std::string(c.name) + ": phương pháp lực khớp PTHH").c_str(), f.ok ? f.maxDiffM : -1, 0);
+    }
+    {
+        // dàn siêu tĩnh: thêm một thanh xiên
+        Model m = ex("Dàn cầu");
+        Element d = m.elements[0];
+        d.n = {0, 7, -1, -1}; // nút 1 (0,0) – nút 8 (3,3)? nối thêm thanh chéo khoang đầu
+        d.n = {1, 6, -1, -1};
+        m.elements.push_back(d);
+        const auto f = forceMethod(m, 0);
+        const auto fe = analyze(m);
+        check(f.ok && f.n == 1, "dàn thêm 1 thanh: n = 1", f.n, 1);
+        if (f.ok && fe.ok) {
+            double d0 = 0;
+            for (size_t e = 0; e < m.elements.size(); ++e)
+                d0 = std::max(d0, std::abs(f.final.bars[e].N[0] - fe.sets[0].bars[e].N[0]));
+            check(d0 < 1e-4, "dàn siêu tĩnh: lực dọc khớp PTHH", d0, 0);
+        }
+    }
+    {
+        const double L = 6, q = 10, E = 2.1e8, I = 7080e-8;
+        Model m = beamModel(L, 2, E, 46.5e-4, I);
+        fix(m, 0, true, true, false);
+        fix(m, 2, false, true, false);
+        m.cases[0].elem.push_back(dload(0, -q, -q));
+        m.cases[0].elem.push_back(dload(1, -q, -q));
+        const auto f = forceMethod(m, 0);
+        const auto mo = mohrDisplacement(m, f, 1, UY);
+        check(mo.ok, "Maxwell–Mohr tính được", 0, 0);
+        if (mo.ok) near("Maxwell–Mohr: độ võng giữa nhịp 5qL⁴/384EI", mo.value, -5 * q * std::pow(L, 4) / (384 * E * I), 2e-4);
+        const Model pf = ex("Khung 1 tầng 1 nhịp");
+        const auto fp = forceMethod(pf, 1);
+        const auto mp = mohrDisplacement(pf, fp, 1, UX);
+        if (mp.ok) near("Maxwell–Mohr: chuyển vị ngang đỉnh khung = PTHH", mp.value, mp.fem, 2e-4);
+        const auto mm = matrixMethod(pf, 0);
+        const auto fe = analyze(pf);
+        check(mm.ok && fe.ok, "phương pháp chuyển vị dạng ma trận", 0, 0);
+        if (mm.ok && fe.ok) {
+            double d = 0;
+            int k = 0;
+            for (int i = 0; i < (int)fe.dofState.size(); ++i)
+                if (fe.dofState[i] == DofFree) d = std::max(d, std::abs(mm.Z[k++] - fe.sets[0].U[i]));
+            check(d < 1e-12, "Z = K⁻¹P khớp PTHH", d, 0);
+        }
+    }
+}
+
+static void testArchTaperTrain() {
+    std::puts("Vòm, thanh vút, xếp đoàn tải");
+    {
+        // vòm ba khớp parabol, tải đều theo hình chiếu: trục hợp lý → M = 0 tại các nút, H = qL²/8f
+        Model m;
+        m.materials.push_back(Material{});
+        m.sections.push_back(Section{});
+        const double L = 24, f = 6, q = 10;
+        const auto nodes = makeArch(m, 0, 0, L, f, 24, 0, 1, 0, 0);
+        m.cases.push_back(LoadCase("q"));
+        for (size_t e = 0; e < m.elements.size(); ++e) {
+            ElemLoad l = dload((int)e, -q, -q);
+            l.projected = true;
+            m.cases[0].elem.push_back(l);
+        }
+        auto r = run(m);
+        if (r.ok) {
+            near("vòm 3 khớp: H = qL²/8f", std::abs(r.sets[0].R[0]), q * L * L / (8 * f), 1e-9);
+            double mn = 0;
+            for (const auto& b : r.sets[0].bars) mn = std::max({mn, std::abs(b.M.front()), std::abs(b.M.back())});
+            check(mn < 1e-8 * q * L * L, "vòm parabol: M tại nút = 0 (trục hợp lý)", mn, 0);
+            check(kinematicAnalysis(m).indeterminacy == 0, "vòm 3 khớp tĩnh định", 0, 0);
+        }
+        Model m2;
+        m2.materials.push_back(Material{});
+        m2.sections.push_back(Section{});
+        makeArch(m2, 0, 0, L, f, 24, 1, 2, 0, 0);
+        check(kinematicAnalysis(m2).indeterminacy == 3, "vòm tròn 2 ngàm: siêu tĩnh bậc 3", 0, 0);
+    }
+    {
+        // công-xôn vút: tiết diện chữ nhật 30×60 → 30×30
+        Model m = beamModel(4, 1, 3e7, 0.18, 0.0054);
+        m.sections[0] = rectSection(0.3, 0.6);
+        m.sections.push_back(rectSection(0.3, 0.3));
+        fix(m, 0, true, true, true);
+        m.cases[0].nodal.push_back({1, {0, -10, 0}});
+        const int n = taperBar(m, 0, 1, 8);
+        check(n == 8 && m.elements.size() == 8 && m.sections.size() == 10, "chia vút 8 đoạn", (double)m.elements.size(), 8);
+        bool mono = true;
+        for (int k = 0; k + 1 < 8; ++k) mono &= m.sections[m.elements[k].sec].I > m.sections[m.elements[k + 1].sec].I;
+        check(mono, "I giảm dần từ ngàm ra đầu tự do", 0, 0);
+        auto r = run(m);
+        if (r.ok) near("M ngàm = PL (tĩnh định)", r.sets[0].bars[0].M.front(), -40, 1e-9);
+    }
+    {
+        // dầm đơn giản L = 20: đah M giữa nhịp (tam giác, đỉnh L/4)
+        const double L = 20;
+        Model m = beamModel(L, 2, 2e8, 0.01, 1e-4);
+        fix(m, 0, true, true, false);
+        fix(m, 2, false, true, false);
+        IlTarget t;
+        t.kind = IlKind::Force;
+        t.elem = 0;
+        t.x = L / 2;
+        t.qty = BarQty::M;
+        const auto il = influenceLine(m, {0, 1}, t, 20);
+        LoadTrain one{"P", {{100, 0}}, 0};
+        near("1 trục P: Smax = PL/4", moveTrain(il, one).Smax, 100 * L / 4, 1e-9);
+        LoadTrain two{"2P", {{100, 0}, {100, 4}}, 0};
+        near("2 trục cách 4 m: Smax = P(L/4 + (L/2 − 4)/2)", moveTrain(il, two).Smax, 100 * (L / 4 + (L / 2 - 4) / 2), 1e-9);
+        LoadTrain lane{"làn", {{0, 0}}, 10};
+        near("tải làn q: S = qΩ = qL²/8", moveTrain(il, lane).Smax, 10 * L * L / 8, 1e-9);
+    }
+}
+
 int main() {
+    testArchTaperTrain();
+    testForceMethod();
     testSectionGeom();
     testLackOfFit();
     testPDelta();

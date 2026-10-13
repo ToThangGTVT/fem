@@ -551,6 +551,11 @@ void barEigenMatrices(const BarProps& p, double N, double rhoA, Mat6& Kg, Mat6& 
     toGlobal(M, Mg);
 }
 
+void barForcesAt(const BarProps& p, const BarLoads& l, const BarResult& r, double x, bool after, double& N, double& Q,
+                 double& M) {
+    forcesAt(p, l, r.endForces, r.uLocal, x, after, N, Q, M);
+}
+
 void barFoundationForce(const BarProps& p, const BarResult& r, double& Fx, double& Fy) {
     Fx = Fy = 0;
     if (p.kf <= 0) return; // lớp trượt Pasternak không tạo hợp lực (nội lực của nền)

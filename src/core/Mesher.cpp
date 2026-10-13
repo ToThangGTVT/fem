@@ -1,5 +1,9 @@
 #include "core/Mesher.h"
 
+#include <cstdio>
+
+#include "core/SectionGeom.h"
+
 #include <algorithm>
 #include <cmath>
 #include <functional>
@@ -313,6 +317,63 @@ int mergeNodes(Model& m, double tol) {
                      m.supports.end());
     m.removeNodes(drop);
     return merged;
+}
+
+int taperBar(Model& m, int e, int secJ, int n) {
+    if (e < 0 || e >= (int)m.elements.size() || !m.elements[e].isBar() || secJ < 0 || secJ >= (int)m.sections.size() || n < 1)
+        return 0;
+    const Section si = m.sections[m.elements[e].sec], sj = m.sections[secJ];
+    const bool sameShape = si.shape.kind == sj.shape.kind && si.shape.kind != ShapeKind::None &&
+                           si.shape.kind != ShapeKind::Polygon;
+    const int firstElem = (int)m.elements.size();
+    if (n > 1) subdivideBar(m, e, n);
+    std::vector<int> pieces = {e};
+    for (int k = firstElem; k < (int)m.elements.size(); ++k) pieces.push_back(k);
+    for (int k = 0; k < n; ++k) {
+        const double t = (k + 0.5) / n; // nội suy tại giữa đoạn
+        Section s;
+        if (sameShape) {
+            SectionShape sh = si.shape;
+            for (int i = 0; i < 6; ++i) sh.p[i] = si.shape.p[i] + t * (sj.shape.p[i] - si.shape.p[i]);
+            s = sectionFromShape("", sh);
+        } else {
+            s.A = si.A + t * (sj.A - si.A);
+            s.I = si.I + t * (sj.I - si.I);
+            s.h = si.h + t * (sj.h - si.h);
+        }
+        char b[160];
+        std::snprintf(b, sizeof b, "%s→%s %d/%d", si.name.c_str(), sj.name.c_str(), k + 1, n);
+        s.name = b;
+        m.sections.push_back(s);
+        m.elements[pieces[k]].sec = (int)m.sections.size() - 1;
+    }
+    return n;
+}
+
+std::vector<int> makeArch(Model& m, double x0, double y0, double L, double f, int n, int shape, int supports, int mat, int sec) {
+    n = std::max(2, n + (n % 2)); // số đoạn chẵn để có nút đỉnh vòm
+    std::vector<int> nodes;
+    const double R = (L * L / 4 + f * f) / (2 * f); // bán kính cung tròn
+    for (int i = 0; i <= n; ++i) {
+        const double x = L * i / n;
+        double y;
+        if (shape == 0) y = 4 * f * x * (L - x) / (L * L);
+        else y = std::sqrt(std::max(0.0, R * R - (x - L / 2) * (x - L / 2))) - (R - f);
+        nodes.push_back(m.addNode(x0 + x, y0 + y));
+    }
+    for (int i = 0; i < n; ++i) {
+        Element el;
+        el.type = ElemType::Frame;
+        el.n = {nodes[i], nodes[i + 1], -1, -1};
+        el.mat = mat;
+        el.sec = sec;
+        if (supports == 1 && i == n / 2 - 1) el.hingeJ = true; // khớp đỉnh vòm
+        m.elements.push_back(el);
+    }
+    const bool fixRot = supports == 2;
+    m.supportFor(nodes.front()).fix = {true, true, fixRot};
+    m.supportFor(nodes.back()).fix = {true, true, fixRot};
+    return nodes;
 }
 
 } // namespace fem

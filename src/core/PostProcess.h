@@ -53,4 +53,27 @@ InfluenceLine influenceLine(const Model& m, const std::vector<int>& path, const 
 
 std::string ilTargetName(const Model& m, const IlTarget& t);
 
+// ---------------------------------------------------------------- xếp đoàn tải trên đường ảnh hưởng
+struct AxleLoad {
+    double P;      // kN (hướng xuống)
+    double offset; // khoảng cách tới trục đầu tiên (m)
+};
+struct LoadTrain {
+    std::string name;
+    std::vector<AxleLoad> axles;
+    double lane = 0; // tải làn phân bố đều (kN/m), đặt trên phần đường ảnh hưởng cùng dấu
+};
+const std::vector<LoadTrain>& trainPresets();
+
+struct TrainResult {
+    bool ok = false;
+    double Smax = 0, Smin = 0;     // giá trị lớn nhất / nhỏ nhất của đại lượng
+    double xMax = 0, xMin = 0;     // vị trí trục đầu tiên (tọa độ X tổng thể)
+    bool revMax = false, revMin = false; // đoàn tải quay đầu
+    double laneMax = 0, laneMin = 0;     // phần đóng góp của tải làn
+};
+// Tung độ đường ảnh hưởng tại hoành độ X (theo hình chiếu ngang dọc đường chạy)
+double ilValueAtX(const InfluenceLine& il, double X);
+TrainResult moveTrain(const InfluenceLine& il, const LoadTrain& t);
+
 } // namespace fem

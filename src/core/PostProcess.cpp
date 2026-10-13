@@ -240,4 +240,81 @@ std::string ilTargetName(const Model& m, const IlTarget& t) {
     return b;
 }
 
+const std::vector<LoadTrain>& trainPresets() {
+    static const std::vector<LoadTrain> v = {
+        {"Lực đơn vị P = 1", {{1, 0}}, 0},
+        {"Xe H30 (22TCN 18-79): 60 + 120 + 120 kN", {{60, 0}, {120, 6.0}, {120, 7.6}}, 0},
+        {"Xe tải HL-93 (TCVN 11823): 35 + 145 + 145 kN, làn 9,3 kN/m", {{35, 0}, {145, 4.3}, {145, 8.6}}, 9.3},
+        {"Xe hai trục HL-93: 2 × 110 kN, làn 9,3 kN/m", {{110, 0}, {110, 1.2}}, 9.3},
+        {"НК-80: 4 × 200 kN, cách 1,2 m", {{200, 0}, {200, 1.2}, {200, 2.4}, {200, 3.6}}, 0},
+    };
+    return v;
+}
+
+double ilValueAtX(const InfluenceLine& il, double X) {
+    // các đoạn theo thứ tự X tăng dần (đường chạy đã sắp từ trái sang phải)
+    std::vector<std::pair<double, double>> pts;
+    for (const auto& p : il.pts) pts.push_back({p.X, p.value});
+    std::stable_sort(pts.begin(), pts.end(), [](auto& a, auto& b) { return a.first < b.first; });
+    if (pts.empty() || X < pts.front().first - 1e-12 || X > pts.back().first + 1e-12) return 0;
+    for (size_t k = 0; k + 1 < pts.size(); ++k) {
+        const double x0 = pts[k].first, x1 = pts[k + 1].first;
+        if (X >= x0 && X <= x1) {
+            if (x1 - x0 <= 1e-12) continue; // bước nhảy: lấy đoạn kế tiếp
+            return pts[k].second + (X - x0) / (x1 - x0) * (pts[k + 1].second - pts[k].second);
+        }
+    }
+    return pts.back().second;
+}
+
+TrainResult moveTrain(const InfluenceLine& il, const LoadTrain& t) {
+    TrainResult r;
+    if (!il.ok || il.pts.empty() || t.axles.empty()) return r;
+    double X0 = 1e300, X1 = -1e300;
+    for (const auto& p : il.pts) {
+        X0 = std::min(X0, p.X);
+        X1 = std::max(X1, p.X);
+    }
+    double len = 0;
+    for (const auto& a : t.axles) len = std::max(len, a.offset);
+    // tải làn: phủ phần cùng dấu
+    r.laneMax = t.lane * std::max(0.0, il.areaPos);
+    r.laneMin = t.lane * std::min(0.0, il.areaNeg);
+    // vị trí thử: mỗi trục đặt tại mỗi đỉnh đường ảnh hưởng (lời giải tối ưu cho đường gãy khúc) + lưới đều
+    std::vector<double> cand;
+    for (const auto& p : il.pts)
+        for (const auto& a : t.axles) {
+            cand.push_back(p.X - a.offset);
+            cand.push_back(p.X + a.offset); // khi quay đầu
+        }
+    const int nGrid = 600;
+    for (int i = 0; i <= nGrid; ++i) cand.push_back(X0 - len + (X1 - X0 + 2 * len) * i / nGrid);
+    r.Smax = -1e300;
+    r.Smin = 1e300;
+    for (double x : cand)
+        for (int rev = 0; rev < 2; ++rev) {
+            double S = 0;
+            for (const auto& a : t.axles) {
+                const double xa = rev ? x - a.offset : x + a.offset;
+                S += a.P * ilValueAtX(il, xa);
+                // tại bước nhảy: thử thêm cả hai phía
+            }
+            if (S > r.Smax) {
+                r.Smax = S;
+                r.xMax = x;
+                r.revMax = rev;
+            }
+            if (S < r.Smin) {
+                r.Smin = S;
+                r.xMin = x;
+                r.revMin = rev;
+            }
+        }
+    r.Smax = std::max(r.Smax, 0.0) + r.laneMax;
+    r.Smin = std::min(r.Smin, 0.0) + r.laneMin;
+    r.ok = true;
+    return r;
+}
+
 } // namespace fem
+

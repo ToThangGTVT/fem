@@ -1042,6 +1042,31 @@ void App::propsPanel() {
                           lc.elem.end());
             changed();
         }
+        ImGui::SeparatorText("Thanh vút (tiết diện thay đổi)");
+        {
+            static int secJ = 0, nTaper = 8;
+            secJ = std::clamp(secJ, 0, std::max(0, (int)m.sections.size() - 1));
+            ImGui::SetNextItemWidth(150);
+            if (ImGui::BeginCombo("Tiết diện đầu j", secs.empty() ? "—" : secs[secJ].c_str())) {
+                for (int i = 0; i < (int)secs.size(); ++i)
+                    if (ImGui::Selectable(secs[i].c_str(), i == secJ)) secJ = i;
+                ImGui::EndCombo();
+            }
+            ImGui::SameLine();
+            ImGui::SetNextItemWidth(70);
+            ImGui::InputInt("đoạn", &nTaper);
+            nTaper = std::clamp(nTaper, 2, 100);
+            if (ImGui::Button("Tạo thanh vút")) {
+                snapshot();
+                std::vector<int> sorted = bars;
+                std::sort(sorted.rbegin(), sorted.rend());
+                for (int e : sorted) taperBar(m, e, secJ, nTaper);
+                selElems.clear();
+                changed();
+            }
+            help("Chia thanh thành các đoạn lăng trụ có tiết diện nội suy từ tiết diện hiện có (đầu i) đến tiết diện đầu j. "
+                 "Hai tiết diện cùng dạng (ví dụ chữ nhật) thì nội suy kích thước, nên I thay đổi đúng quy luật h³.");
+        }
         ImGui::SeparatorText("Hình học");
         static int nDiv = 4;
         ImGui::SetNextItemWidth(80);
@@ -1250,6 +1275,38 @@ void App::resultPanel() {
             ImGui::Text("Diện tích: Ω+ = %.4f, Ω− = %.4f, Ω = %.4f", il.areaPos, il.areaNeg, il.areaPos + il.areaNeg);
             ImGui::TextDisabled("Tải đều q trên toàn đường chạy: S = q·Ω; lực P đặt tại tung độ y: S = P·y");
             ImGui::TextDisabled("(Tải q, P hướng xuống mang dấu dương)");
+            ImGui::SeparatorText("Xếp đoàn tải bất lợi");
+            const auto& presets = trainPresets();
+            const char* pv = trainPreset < (int)presets.size() ? presets[trainPreset].name.c_str() : "Tự nhập";
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::BeginCombo("##train", pv)) {
+                for (int i = 0; i < (int)presets.size(); ++i)
+                    if (ImGui::Selectable(presets[i].name.c_str(), i == trainPreset)) trainPreset = i;
+                if (ImGui::Selectable("Tự nhập", trainPreset >= (int)presets.size())) trainPreset = (int)presets.size();
+                ImGui::EndCombo();
+            }
+            if (trainPreset >= (int)presets.size()) {
+                ImGui::SetNextItemWidth(220);
+                if (ImGui::InputText("P@khoảng cách (kN@m)", &customTrainText)) {
+                    customTrain.axles.clear();
+                    std::istringstream in(customTrainText);
+                    std::string tok;
+                    while (in >> tok) {
+                        const size_t at = tok.find('@');
+                        customTrain.axles.push_back({std::strtod(tok.c_str(), nullptr),
+                                                     at == std::string::npos ? 0.0 : std::strtod(tok.c_str() + at + 1, nullptr)});
+                    }
+                }
+                ImGui::SetNextItemWidth(100);
+                ImGui::InputDouble("Tải làn (kN/m)", &customTrain.lane, 0, 0, "%.3g");
+            }
+            ImGui::Checkbox("Vẽ đoàn tải ở vị trí bất lợi", &trainShow);
+            const TrainResult tr = moveTrain(il, currentTrain());
+            if (tr.ok) {
+                ImGui::Text("Smax = %.3f  (trục đầu tại X = %.2f m%s)", tr.Smax, tr.xMax, tr.revMax ? ", quay đầu" : "");
+                ImGui::Text("Smin = %.3f  (trục đầu tại X = %.2f m%s)", tr.Smin, tr.xMin, tr.revMin ? ", quay đầu" : "");
+                if (currentTrain().lane > 0) ImGui::TextDisabled("Đã gồm tải làn: +%.3f / %.3f", tr.laneMax, tr.laneMin);
+            }
         } else {
             ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(200, 30, 30, 255));
             ImGui::TextWrapped("%s", il.error.c_str());
@@ -1971,5 +2028,10 @@ void App::kinematicsDialog() {
     ImGui::PopStyleColor();
     if (bad && !k.mechanismU.empty() && ImGui::Button("Xem dạng biến hình")) showMechanism();
     ImGui::End();
+}
+
+const LoadTrain& App::currentTrain() const {
+    const auto& presets = trainPresets();
+    return trainPreset < (int)presets.size() ? presets[trainPreset] : customTrain;
 }
 

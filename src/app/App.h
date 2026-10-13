@@ -8,6 +8,7 @@
 
 #include "core/Analysis.h"
 #include "core/Eigen.h"
+#include "core/ForceMethod.h"
 #include "core/Kinematics.h"
 #include "core/Model.h"
 #include "core/PostProcess.h"
@@ -112,6 +113,20 @@ struct App {
     bool showKinematics = false;
     bool showSectionDesigner = false, showSectionStress = false;
 
+    // ---- lời giải theo giáo trình
+    fem::ForceMethodResult fm;
+    int fmVersion = -1, fmSet = 0, fmShow = -1;
+    fem::MohrResult mohr;
+    int mohrNode = 0, mohrDof = 1;
+    fem::MatrixMethodResult mm;
+    int mmVersion = -1;
+    bool showForceMethod = false, showMatrixMethod = false, showArchGen = false;
+    // xếp đoàn tải trên đường ảnh hưởng
+    int trainPreset = 1;
+    fem::LoadTrain customTrain{"Tự nhập", {{100, 0}, {100, 4}}, 0};
+    std::string customTrainText = "100@0 100@4";
+    bool trainShow = false;
+
     // ---- dòng lệnh kiểu AutoCAD
     std::unique_ptr<Command> cmd;
     std::string cmdLine, lastCommand;
@@ -203,6 +218,11 @@ struct App {
     void kinematicsDialog();
     void sectionDesigner();
     void sectionStressDialog();
+    void forceMethodDialog();
+    void matrixMethodDialog();
+    void archDialog();
+    const fem::LoadSetResult* forceMethodShown(std::string* title = nullptr);
+    const fem::LoadTrain& currentTrain() const;
     void showMechanism();
     void runEigen();
     void viewport();

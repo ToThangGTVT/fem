@@ -895,6 +895,8 @@ std::vector<std::pair<std::string, std::string>> commandHelp() {
         {"TINH (F5), PDELTA", "tính toán; bật/tắt sơ đồ biến dạng P-Δ"},
         {"CTHH", "phân tích cấu tạo hình học: W, bậc siêu tĩnh, dạng biến hình"},
         {"TIETDIEN / USTD", "thiết kế tiết diện (đặc trưng, lõi) / ứng suất trên tiết diện, vòng Mohr"},
+        {"PPL / PPCV", "phương pháp lực từng bước, Maxwell–Mohr / phương pháp chuyển vị dạng ma trận"},
+        {"VOM / VUT", "tạo vòm / thanh vút (tiết diện thay đổi)"},
         {"ONDINH / DAODONG", "ổn định / dao động riêng"},
         {"DI, ID, LI", "đo khoảng cách / tọa độ / liệt kê"},
         {"Z", "zoom (E: toàn bộ, W: cửa sổ)"},

@@ -66,6 +66,10 @@ void barRecover(const BarProps& p, const BarLoads& l, const Vec6& uGlobal, int s
 //   K  — độ cứng; KG — độ cứng hình học ứng với lực dọc N (N > 0 kéo); M — khối lượng tương thích, ρA (t/m).
 void barEigenMatrices(const BarProps& p, double N, double rhoA, Mat6& K, Mat6& KG, Mat6& M);
 
+// Nội lực tại x của thanh đã tính (dùng lực đầu thanh và chuyển vị trong r)
+void barForcesAt(const BarProps& p, const BarLoads& l, const BarResult& r, double x, bool after, double& N, double& Q,
+                 double& M);
+
 // Hợp lực phản lực nền Winkler tác dụng lên thanh, hệ tổng thể (Fx, Fy).
 void barFoundationForce(const BarProps& p, const BarResult& r, double& Fx, double& Fy);
 

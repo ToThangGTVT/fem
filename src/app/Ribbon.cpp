@@ -749,6 +749,7 @@ void App::ribbon() {
         endColumn();
         beginColumn();
         if (smallButton("Tạo dàn", Icon::TrussGen, "Tạo dàn Pratt/Howe/Warren/tam giác (TAODAN)")) showTrussGen = true;
+        if (smallButton("Tạo vòm", Icon::Influence, "Vòm parabol/tròn, 2 khớp/3 khớp/ngàm (VOM)")) showArchGen = true;
         endColumn();
         endPanel("Vẽ");
 
@@ -911,6 +912,10 @@ void App::ribbon() {
         if (bigButton("Cấu tạo\nhình học", Icon::Truss, "Bậc tự do W, bậc siêu tĩnh, kết luận bất biến hình (lệnh CTHH)")) startCommand("CTHH");
         endPanel("Cấu tạo");
         beginPanel();
+        if (bigButton("Phương\npháp lực", Icon::Combo, "Giải từng bước: hệ cơ bản, M̄i, δik, ΔiP, X (lệnh PPL)")) startCommand("PPL");
+        if (bigButton("Chuyển vị\nma trận", Icon::Mesh, "Phương pháp chuyển vị dạng ma trận K·Z = P (lệnh PPCV)")) startCommand("PPCV");
+        endPanel("Giáo trình");
+        beginPanel();
         if (bigButton("Ổn định", Icon::Buckle, "Tải trọng tới hạn, hệ số chiều dài tính toán μ")) startCommand("ONDINH");
         if (bigButton("Dao động\nriêng", Icon::Modal, "Tần số, chu kỳ, dạng dao động")) startCommand("DAODONG");
         endPanel("Trị riêng");
@@ -1039,6 +1044,7 @@ void App::ribbon() {
         break;
     }
     }
+    ImGui::Dummy(ImVec2(0, 0)); // sau SetCursorScreenPos của panel cuối cần một item (quy tắc của ImGui)
     ImGui::End();
 }
 
@@ -1284,6 +1290,23 @@ void App::startCommand(const std::string& raw) {
     if (is({"USTD", "SECSTRESS"})) {
         showSectionStress = true;
         if (view == ResultView::None) view = ResultView::M;
+        return;
+    }
+    if (is({"PPL", "FORCEMETHOD"})) {
+        showForceMethod = true;
+        return;
+    }
+    if (is({"PPCV", "MATRIX"})) {
+        showMatrixMethod = true;
+        return;
+    }
+    if (is({"VOM", "ARCH"})) {
+        showArchGen = true;
+        return;
+    }
+    if (is({"VUT", "TAPER"})) {
+        showPropsPanel = true;
+        echo("Chọn thanh, rồi dùng mục \"Thanh vút\" trong bảng Thuộc tính (chọn tiết diện đầu j và số đoạn).");
         return;
     }
     if (is({"PDELTA"})) {

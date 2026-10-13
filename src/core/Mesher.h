@@ -17,6 +17,14 @@ void subdivideBar(Model& m, int e, int n);
 // Cắt thanh e tại vị trí t ∈ (0, 1) tính từ đầu i; tải trên thanh được chia lại. Trả về chỉ số nút mới.
 int splitBarAt(Model& m, int e, double t);
 
+// Thanh vút: chia thanh e thành n đoạn lăng trụ có tiết diện nội suy từ tiết diện hiện có (đầu i) tới secJ (đầu j).
+// Tiết diện cùng dạng hình học: nội suy kích thước; ngược lại nội suy A, I, h tuyến tính. Trả về số tiết diện mới.
+int taperBar(Model& m, int e, int secJ, int n);
+
+// Vòm: nhịp L, mũi tên f, n đoạn; dạng 0: parabol, 1: cung tròn. Gối: 0 hai khớp, 1 ba khớp, 2 hai ngàm.
+// Trả về chỉ số các nút từ trái sang phải; các thanh dùng vật liệu mat, tiết diện sec.
+std::vector<int> makeArch(Model& m, double x0, double y0, double L, double f, int n, int shape, int supports, int mat, int sec);
+
 // Gộp các nút trùng nhau (khoảng cách ≤ tol): nối lại phần tử, gối, tải; bỏ phần tử suy biến hoặc trùng lặp.
 // Trả về số nút đã gộp.
 int mergeNodes(Model& m, double tol);

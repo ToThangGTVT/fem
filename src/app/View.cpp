@@ -199,6 +199,8 @@ void App::viewport() {
     }
 
     const LoadSetResult* rs = currentSet();
+    std::string fmTitle;
+    if (const LoadSetResult* o = forceMethodShown(&fmTitle)) rs = o; // biểu đồ của phương pháp lực
     const bool showRes = rs != nullptr && view != ResultView::None;
 
     // ---- hệ số phóng đại biến dạng
@@ -567,6 +569,38 @@ void App::viewport() {
                 }
                 if (vmax > 0) drawCurve(base, nrm, xs, vals, 1.0f, kpx, vmax, true, (int)(P.posFill >> 24));
                 i = j;
+            }
+            // đoàn tải ở vị trí bất lợi nhất
+            if (trainShow) {
+                const LoadTrain& tr = currentTrain();
+                const TrainResult t = moveTrain(il, tr);
+                auto pathY = [&](double X) {
+                    double best = 1e300, y = 0;
+                    for (const auto& p : il.pts)
+                        if (std::abs(p.X - X) < best) {
+                            best = std::abs(p.X - X);
+                            y = p.Y;
+                        }
+                    return y;
+                };
+                for (int which = 0; which < 2 && t.ok; ++which) {
+                    const double x0 = which == 0 ? t.xMax : t.xMin;
+                    const bool rev = which == 0 ? t.revMax : t.revMin;
+                    const ImU32 col = which == 0 ? P.posLine : P.negLine;
+                    for (const auto& a : tr.axles) {
+                        if (a.P == 0) continue;
+                        const double X = rev ? x0 - a.offset : x0 + a.offset;
+                        const ImVec2 p = cam.toScreen(X, pathY(X));
+                        const float lift = which == 0 ? 0.0f : 0.0f;
+                        arrow(dl, p - ImVec2(0, 46 + lift), p - ImVec2(0, 4), withAlpha(col, which == 0 ? 255 : 150), 2.0f, 8);
+                        if (showValues) label(dl, p - ImVec2(0, 54), fmtVal(a.P), col, ImVec2(0.5f, 1), 0.8f);
+                    }
+                }
+                if (t.ok) {
+                    char b[160];
+                    std::snprintf(b, sizeof b, "%s:  Smax = %s,  Smin = %s", tr.name.c_str(), fmtVal(t.Smax).c_str(), fmtVal(t.Smin).c_str());
+                    label(dl, ImVec2(cam.c0.x + 10, cam.c0.y + 50), b, P.text, ImVec2(0, 0.5f));
+                }
             }
             // đánh dấu đại lượng khảo sát
             if (ilTarget.kind == IlKind::Force && ilTarget.elem < (int)m.elements.size()) {
@@ -1364,6 +1398,7 @@ void App::viewport() {
         dl->AddText(o + ImVec2(52, -8), P.axisX, "X");
         dl->AddText(o + ImVec2(-4, -66), P.axisY, "Y");
     }
+    if (!fmTitle.empty()) label(dl, ImVec2(cam.c0.x + 10, cam.c0.y + 30), fmTitle, P.select, ImVec2(0, 0.5f));
     if (!result.ok && !result.error.empty())
         label(dl, ImVec2(cam.c0.x + 10, cam.c0.y + 12), "⚠ " + result.error, IM_COL32(230, 60, 50, 255), ImVec2(0, 0.5f), 0.9f);
     else if (needAnalyze && !autoAnalyze)

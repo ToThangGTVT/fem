@@ -9,6 +9,7 @@
 #include <string>
 
 #include "App.h"
+#include "core/ForceMethod.h"
 #include "core/Model.h"
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
@@ -117,6 +118,14 @@ int main(int argc, char** argv) {
             app.showEnvelope = f.find('e') != std::string::npos;
             if (f.find('k') != std::string::npos) app.startCommand("CTHH");
             if (f.find('d') != std::string::npos) app.showSectionDesigner = true;
+            if (f.find('f') != std::string::npos) {
+                app.showForceMethod = true;
+                app.fm = fem::forceMethod(app.model, 0);
+                app.fmVersion = app.modelVersion;
+                app.fmShow = 0;
+                app.view = ResultView::M;
+            }
+            if (f.find('r') != std::string::npos) app.trainShow = true;
             if (f.find('t') != std::string::npos) {
                 app.selElems = {1};
                 app.showSectionStress = true;

@@ -390,6 +390,9 @@ void App::frame() {
     if (showKinematics) kinematicsDialog();
     if (showSectionDesigner) sectionDesigner();
     if (showSectionStress) sectionStressDialog();
+    if (showForceMethod) forceMethodDialog();
+    if (showMatrixMethod) matrixMethodDialog();
+    if (showArchGen) archDialog();
     if (showDemo) ImGui::ShowDemoWindow(&showDemo);
     savePrompt();
     clampIndices();
