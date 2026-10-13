@@ -918,7 +918,9 @@ void App::ribbon() {
         beginPanel();
         if (bigButton("Ổn định", Icon::Buckle, "Tải trọng tới hạn, hệ số chiều dài tính toán μ")) startCommand("ONDINH");
         if (bigButton("Dao động\nriêng", Icon::Modal, "Tần số, chu kỳ, dạng dao động")) startCommand("DAODONG");
-        endPanel("Trị riêng");
+        if (bigButton("Động\nlực học", Icon::Deformed, "Phổ phản ứng TCVN 9386, dao động cưỡng bức, theo thời gian (lệnh DONGLUC)"))
+            startCommand("DONGLUC");
+        endPanel("Trị riêng & động lực");
         beginPanel();
         if (bigButton("Đường ảnh\nhưởng", Icon::Influence, "Thiết lập trong panel Kết quả", view == ResultView::Influence)) {
             view = ResultView::Influence;
@@ -1290,6 +1292,10 @@ void App::startCommand(const std::string& raw) {
     if (is({"USTD", "SECSTRESS"})) {
         showSectionStress = true;
         if (view == ResultView::None) view = ResultView::M;
+        return;
+    }
+    if (is({"DONGLUC", "DYNAMICS", "PHOPU"})) {
+        showDynamics = true;
         return;
     }
     if (is({"PPL", "FORCEMETHOD"})) {

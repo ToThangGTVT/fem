@@ -200,7 +200,7 @@ void App::viewport() {
 
     const LoadSetResult* rs = currentSet();
     std::string fmTitle;
-    if (const LoadSetResult* o = forceMethodShown(&fmTitle)) rs = o; // biểu đồ của phương pháp lực
+    if (const LoadSetResult* o = overrideShown(&fmTitle)) rs = o; // biểu đồ phương pháp lực / động lực học
     const bool showRes = rs != nullptr && view != ResultView::None;
 
     // ---- hệ số phóng đại biến dạng

@@ -5,6 +5,7 @@
 #include <string>
 
 #include "core/Analysis.h"
+#include "core/Dynamics.h"
 #include "core/Eigen.h"
 #include "core/Examples.h"
 #include "core/ForceMethod.h"
@@ -1164,7 +1165,81 @@ static void testArchTaperTrain() {
     }
 }
 
+static void testDynamics() {
+    std::puts("Động lực học: phổ phản ứng, cưỡng bức điều hòa, Newmark");
+    {
+        // phổ thiết kế nền C: liên tục tại TB, TC, TD
+        SpectrumParams sp;
+        sp.agR = 0.1;
+        sp.q = 1.5;
+        sp.soil = 2;
+        const double ag = 0.1 * 9.81, S = 1.15;
+        near("Sd(TB) = ag·S·2,5/q", spectrumSd(sp, 0.2), ag * S * 2.5 / 1.5, 1e-12);
+        near("Sd(0) = ag·S·2/3", spectrumSd(sp, 0), ag * S * 2.0 / 3.0, 1e-12);
+        near("Sd(TC) liên tục", spectrumSd(sp, 0.6), ag * S * 2.5 / 1.5, 1e-12);
+        near("Sd(1,2 s) = ag·S·2,5/q·TC/T", spectrumSd(sp, 1.2), ag * S * 2.5 / 1.5 * 0.6 / 1.2, 1e-12);
+        near("Sd(3 s) ≥ β·ag", spectrumSd(sp, 3.0), std::max(ag * S * 2.5 / 1.5 * 0.6 * 2.0 / 9.0, 0.2 * ag), 1e-12);
+    }
+    // cột không trọng lượng mang khối lượng W/g ở đỉnh (hệ 1 bậc tự do theo phương ngang)
+    const double H = 4, E = 3e7, b = 0.3, h = 0.3, W = 200, EI = E * b * h * h * h / 12;
+    Model m = columnModel(H, E, b * h, b * h * h * h / 12);
+    m.cases[0].nodal[0].F = {0, -W, 0};
+    m.cases.push_back(LoadCase("Ngang"));
+    m.cases[1].nodal.push_back({1, {10, 0, 0}});
+    fix(m, 0, true, true, true);
+    EigenOptions eo;
+    eo.selfMassFactor = 0;
+    eo.massSet = 0;
+    eo.modes = 4;
+    eo.subdiv = 4;
+    const double mass = W / 9.81, w = std::sqrt(3 * EI / (mass * H * H * H)), T = 2 * M_PI / w;
+    {
+        SpectrumParams sp;
+        sp.agR = 0.15;
+        sp.q = 1.5;
+        sp.soil = 3;
+        const auto r = spectrumAnalysis(m, eo, sp);
+        check(r.ok, r.error.c_str(), 0, 0);
+        if (r.ok) {
+            near("chu kỳ T1", r.modes[0].T, T, 1e-4);
+            near("khối lượng hữu hiệu dạng 1 = 100%", r.modes[0].ratio, 1.0, 1e-6);
+            near("lực cắt đáy = m·Sd(T1)", r.baseShear, mass * spectrumSd(sp, T), 1e-4);
+            near("chuyển vị đỉnh = Sd/ω²", r.combined.U[3], spectrumSd(sp, T) / (w * w), 1e-4);
+            near("mômen chân cột = V·H", r.combined.bars[0].M.front(), mass * spectrumSd(sp, T) * H, 1e-4);
+        }
+    }
+    {
+        const auto r = harmonicAnalysis(m, eo, 1, 0.5 * w);
+        check(r.ok, r.error.c_str(), 0, 0);
+        if (r.ok) near("hệ số động μ = 1/(1 − (θ/ω)²) = 4/3", r.dynFactor, 4.0 / 3.0, 1e-4);
+    }
+    {
+        TimeHistoryParams p;
+        p.loadSet = 1;
+        p.fn = TimeFn::Step;
+        p.zeta = 0;
+        p.dt = T / 200;
+        p.tEnd = 1.2 * T;
+        const auto r = timeHistory(m, eo, p);
+        check(r.ok, r.error.c_str(), 0, 0);
+        if (r.ok) {
+            const double ust = 10 * H * H * H / (3 * EI);
+            const auto h1 = historyOf(r, 1, UX);
+            double mx = 0;
+            for (double v : h1) mx = std::max(mx, v);
+            near("tải bậc không cản: umax = 2·u_tĩnh", mx, 2 * ust, 2e-3);
+            // chu kỳ: lần trở về 0 đầu tiên sau đỉnh ≈ T
+            size_t k = h1.size() / 2;
+            while (k + 1 < h1.size() && h1[k + 1] > 1e-3 * ust) ++k;
+            near("chu kỳ dao động tự do ≈ T", r.t[k], T, 2e-2);
+            const auto snap = timeSnapshot(m, r, (int)(h1.size() / 2));
+            check(snap.U.size() == 6, "nội lực tại thời điểm t", 0, 0);
+        }
+    }
+}
+
 int main() {
+    testDynamics();
     testArchTaperTrain();
     testForceMethod();
     testSectionGeom();

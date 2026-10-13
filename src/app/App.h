@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "core/Analysis.h"
+#include "core/Dynamics.h"
 #include "core/Eigen.h"
 #include "core/ForceMethod.h"
 #include "core/Kinematics.h"
@@ -127,6 +128,19 @@ struct App {
     std::string customTrainText = "100@0 100@4";
     bool trainShow = false;
 
+    // ---- động lực học
+    fem::EigenOptions dynOpt;
+    fem::SpectrumParams specParams;
+    fem::SpectrumResult spec;
+    fem::HarmonicResult harm;
+    fem::TimeHistoryParams thParams;
+    fem::TimeHistoryResult th;
+    fem::LoadSetResult thSnap;
+    std::string thRecordText = "0 0\n0.1 1\n0.2 -1\n0.3 0.5\n0.4 0\n";
+    int dynVersion = -1, dynShow = 0, specMode = 0, harmSet = 0, thStep = 0, thSnapStep = -1, thNode = 0, thDof = 0;
+    double harmFreq = 2.0;
+    bool showDynamics = false, thPlay = false;
+
     // ---- dòng lệnh kiểu AutoCAD
     std::unique_ptr<Command> cmd;
     std::string cmdLine, lastCommand;
@@ -221,6 +235,8 @@ struct App {
     void forceMethodDialog();
     void matrixMethodDialog();
     void archDialog();
+    void dynamicsDialog();
+    const fem::LoadSetResult* overrideShown(std::string* title = nullptr);
     const fem::LoadSetResult* forceMethodShown(std::string* title = nullptr);
     const fem::LoadTrain& currentTrain() const;
     void showMechanism();

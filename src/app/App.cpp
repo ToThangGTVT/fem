@@ -393,6 +393,7 @@ void App::frame() {
     if (showForceMethod) forceMethodDialog();
     if (showMatrixMethod) matrixMethodDialog();
     if (showArchGen) archDialog();
+    if (showDynamics) dynamicsDialog();
     if (showDemo) ImGui::ShowDemoWindow(&showDemo);
     savePrompt();
     clampIndices();

@@ -26,6 +26,7 @@ add_library(femcore STATIC
   src/core/Kinematics.cpp
   src/core/SectionGeom.cpp
   src/core/ForceMethod.cpp
+  src/core/Dynamics.cpp
 )
 target_include_directories(femcore PUBLIC src)
 if(MSVC)
@@ -93,6 +94,7 @@ if(FEM_BUILD_GUI)
     src/app/Ribbon.cpp
     src/app/SectionUI.cpp
     src/app/Textbook.cpp
+    src/app/DynamicsUI.cpp
   )
   target_link_libraries(fem2d PRIVATE femcore imgui)
   if(MSVC)

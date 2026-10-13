@@ -43,6 +43,20 @@ struct EigenResult {
 
 EigenResult eigenAnalysis(const Model& m, const EigenOptions& opt);
 
+// Hệ ma trận đầy của mô hình đã chia nhỏ (dùng chung cho trị riêng và động lực học)
+struct DenseSystem {
+    Model sub;
+    std::vector<std::vector<int>> pieces;   // các đoạn của mỗi thanh gốc (chỉ số phần tử trong sub)
+    std::vector<std::vector<int>> barChain; // chuỗi nút dọc mỗi thanh gốc
+    std::vector<int> eq;                    // phương trình của từng bậc tự do (−1: bị khóa)
+    std::vector<double> spring;
+    int neq = 0;
+    std::vector<double> K, B;               // neq×neq; B = M (dao động) hoặc −K_G (ổn định)
+    std::vector<double> memberN;
+    std::vector<std::string> warnings;
+};
+bool buildDenseSystem(const Model& m, const EigenOptions& opt, DenseSystem& s, std::string& err);
+
 // Hệ số chiều dài tính toán μ = (π/L)·√(EI/N_cr) của thanh e ở dạng mất ổn định thứ nhất (0 nếu thanh không chịu nén).
 double effectiveLengthFactor(const Model& m, const EigenResult& r, int e);
 

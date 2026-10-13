@@ -126,6 +126,14 @@ int main(int argc, char** argv) {
                 app.view = ResultView::M;
             }
             if (f.find('r') != std::string::npos) app.trainShow = true;
+            if (f.find('p') != std::string::npos) {
+                app.showDynamics = true;
+                app.dynOpt.modes = 6;
+                app.spec = fem::spectrumAnalysis(app.model, app.dynOpt, app.specParams);
+                app.dynVersion = app.modelVersion;
+                app.dynShow = 1;
+                app.view = ResultView::M;
+            }
             if (f.find('t') != std::string::npos) {
                 app.selElems = {1};
                 app.showSectionStress = true;

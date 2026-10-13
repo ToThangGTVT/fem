@@ -211,28 +211,26 @@ void symmetricEigen(int n, std::vector<double>& A, std::vector<double>& d, std::
     tql2(n, V, d, e);
 }
 
-EigenResult eigenAnalysis(const Model& m, const EigenOptions& opt) {
-    const auto t0 = std::chrono::steady_clock::now();
-    EigenResult res;
-    res.kind = opt.kind;
+bool buildDenseSystem(const Model& m, const EigenOptions& opt, DenseSystem& s, std::string& err) {
+    s = DenseSystem{};
     const int nsets = (int)(m.cases.size() + m.combos.size());
     if (m.elements.empty()) {
-        res.error = "Mô hình chưa có phần tử.";
-        return res;
+        err = "Mô hình chưa có phần tử.";
+        return false;
     }
-
     // ---- chia nhỏ các thanh
-    Model& sub = res.sub;
+    Model& sub = s.sub;
     sub = m;
     const int nsub = std::max(1, opt.subdiv);
-    std::vector<std::vector<int>> pieces(m.elements.size());
-    res.barChain.assign(m.elements.size(), {});
+    auto& pieces = s.pieces;
+    pieces.assign(m.elements.size(), {});
+    s.barChain.assign(m.elements.size(), {});
     for (size_t e = 0; e < m.elements.size(); ++e) {
         if (!m.elements[e].isBar()) continue;
         const int n0 = m.elements[e].n[0], n1 = m.elements[e].n[1];
         const int firstNode = (int)sub.nodes.size(), firstElem = (int)sub.elements.size();
         if (nsub > 1) subdivideBar(sub, (int)e, nsub);
-        auto& chain = res.barChain[e];
+        auto& chain = s.barChain[e];
         chain.push_back(n0);
         for (int k = firstNode; k < (int)sub.nodes.size(); ++k) chain.push_back(k);
         chain.push_back(n1);
@@ -244,28 +242,28 @@ EigenResult eigenAnalysis(const Model& m, const EigenOptions& opt) {
     std::vector<double> Nsub(sub.elements.size(), 0.0);
     if (opt.kind == EigenKind::Buckling) {
         if (opt.loadSet < 0 || opt.loadSet >= nsets) {
-            res.error = "Chưa chọn bộ tải gây lực dọc.";
-            return res;
+            err = "Chưa chọn bộ tải gây lực dọc.";
+            return false;
         }
         const AnalysisResult st = analyze(sub, 4);
         if (!st.ok) {
-            res.error = st.error;
-            return res;
+            err = st.error;
+            return false;
         }
-        const LoadSetResult& s = st.sets[opt.loadSet];
+        const LoadSetResult& ls = st.sets[opt.loadSet];
         for (size_t e = 0; e < sub.elements.size(); ++e) {
-            const auto& b = s.bars[e];
+            const auto& b = ls.bars[e];
             if (b.N.empty()) continue;
             double sum = 0;
             for (double v : b.N) sum += v;
             Nsub[e] = sum / b.N.size();
         }
-        res.memberN.assign(m.elements.size(), 0.0);
+        s.memberN.assign(m.elements.size(), 0.0);
         for (size_t e = 0; e < m.elements.size(); ++e) {
             if (pieces[e].empty()) continue;
             double sum = 0;
             for (int k : pieces[e]) sum += Nsub[k];
-            res.memberN[e] = sum / pieces[e].size();
+            s.memberN[e] = sum / pieces[e].size();
         }
     }
 
@@ -281,16 +279,16 @@ EigenResult eigenAnalysis(const Model& m, const EigenOptions& opt) {
     for (size_t e = 0; e < sub.elements.size(); ++e) {
         const Element& el = sub.elements[e];
         if (el.mat < 0 || el.mat >= (int)sub.materials.size()) {
-            res.error = "Phần tử " + std::to_string(e + 1) + " chưa gán vật liệu.";
-            return res;
+            err = "Phần tử " + std::to_string(e + 1) + " chưa gán vật liệu.";
+            return false;
         }
         const Material& mat = sub.materials[el.mat];
         const double rho = mat.gamma / kG * opt.selfMassFactor;
         Blk b;
         if (el.isBar()) {
             if (el.sec < 0 || el.sec >= (int)sub.sections.size()) {
-                res.error = "Thanh " + std::to_string(e + 1) + " chưa gán tiết diện.";
-                return res;
+                err = "Thanh " + std::to_string(e + 1) + " chưa gán tiết diện.";
+                return false;
             }
             const BarProps p = barProps(sub, (int)e);
             Mat6 K, KG, M;
@@ -329,8 +327,8 @@ EigenResult eigenAnalysis(const Model& m, const EigenOptions& opt) {
                     for (int j = 0; j < 8; ++j) b.K[i * 8 + j] = K[i][j];
             }
             if (!ok) {
-                res.error = "Phần tử " + std::to_string(e + 1) + " bị suy biến.";
-                return res;
+                err = "Phần tử " + std::to_string(e + 1) + " bị suy biến.";
+                return false;
             }
             if (opt.kind == EigenKind::Vibration) {
                 double area2 = 0;
@@ -349,36 +347,39 @@ EigenResult eigenAnalysis(const Model& m, const EigenOptions& opt) {
         blk.push_back(std::move(b));
     }
     if (planeWarn)
-        res.warnings.push_back("Phần tử phẳng không được kể độ cứng hình học — chỉ các thanh tham gia mất ổn định.");
+        s.warnings.push_back("Phần tử phẳng không được kể độ cứng hình học — chỉ các thanh tham gia mất ổn định.");
 
     // ---- điều kiện biên & đánh số
     std::vector<char> fixed(ndof, 0);
     std::vector<double> spring(ndof, 0.0);
-    for (const auto& s : sub.supports)
+    for (const auto& sp : sub.supports)
         for (int c = 0; c < 3; ++c) {
-            if (s.node < 0 || s.node >= nn) continue;
-            if (s.fix[c]) fixed[3 * s.node + c] = 1;
-            else if (s.k[c] > 0) {
-                spring[3 * s.node + c] += s.k[c];
-                hasStiff[3 * s.node + c] = 1;
+            if (sp.node < 0 || sp.node >= nn) continue;
+            if (sp.fix[c]) fixed[3 * sp.node + c] = 1;
+            else if (sp.k[c] > 0) {
+                spring[3 * sp.node + c] += sp.k[c];
+                hasStiff[3 * sp.node + c] = 1;
             }
         }
     std::vector<int> eq(ndof, -1);
     int neq = 0;
     for (int d = 0; d < ndof; ++d)
         if (!fixed[d] && hasStiff[d]) eq[d] = neq++;
-    res.numEquations = neq;
+    s.neq = neq;
     if (neq == 0) {
-        res.error = "Không có bậc tự do tự do.";
-        return res;
+        err = "Không có bậc tự do tự do.";
+        return false;
     }
     if (neq > 2500) {
-        res.error = "Mô hình quá lớn cho bộ giải trị riêng dạng ma trận đầy (" + std::to_string(neq) +
+        err = "Mô hình quá lớn cho bộ giải trị riêng dạng ma trận đầy (" + std::to_string(neq) +
                     " phương trình > 2500). Hãy giảm số đoạn chia hoặc lưới.";
-        return res;
+        return false;
     }
     const size_t N = (size_t)neq;
-    std::vector<double> K(N * N, 0.0), B(N * N, 0.0);
+    s.K.assign(N * N, 0.0);
+    s.B.assign(N * N, 0.0);
+    auto& K = s.K;
+    auto& B = s.B;
     for (const auto& b : blk) {
         const int n = (int)b.dofs.size();
         for (int i = 0; i < n; ++i) {
@@ -403,6 +404,33 @@ EigenResult eigenAnalysis(const Model& m, const EigenOptions& opt) {
         }
     }
 
+    s.eq = eq;
+    s.spring = spring;
+    return true;
+}
+
+EigenResult eigenAnalysis(const Model& m, const EigenOptions& opt) {
+    const auto t0 = std::chrono::steady_clock::now();
+    EigenResult res;
+    res.kind = opt.kind;
+    DenseSystem sys;
+    {
+        std::string err;
+        if (!buildDenseSystem(m, opt, sys, err)) {
+            res.error = err;
+            return res;
+        }
+    }
+    res.sub = sys.sub;
+    res.barChain = sys.barChain;
+    res.memberN = sys.memberN;
+    res.warnings = sys.warnings;
+    res.numEquations = sys.neq;
+    const int nn = (int)res.sub.nodes.size(), ndof = 3 * nn, neq = sys.neq;
+    const size_t N = (size_t)neq;
+    const std::vector<int>& eq = sys.eq;
+    std::vector<double>& K = sys.K;
+    std::vector<double>& B = sys.B;
     // ---- K = L·Lᵀ (Cholesky)
     std::vector<double>& L = K; // phân tích tại chỗ, phần tam giác dưới
     double kmax = 0;
