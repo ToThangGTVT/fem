@@ -74,7 +74,16 @@ jobs:
           ${{ matrix.cmake_args }}
 
       - name: Biên dịch
-        run: cmake --build build --config Release --parallel
+        run: |
+          set +e
+          cmake --build build --config Release --parallel 2>&1 | tee build.log
+          rc=${PIPESTATUS[0]}
+          if [ $rc -ne 0 ]; then
+            # Gom các dòng lỗi thành một annotation để xem được ngay trên trang Actions
+            msg=$(grep -E ": (fatal )?error|error (C|LNK)[0-9]+" build.log | tr -d '\r' | sort -u | head -40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+            echo "::error title=Lỗi biên dịch::$msg"
+          fi
+          exit $rc
 
       - name: Kiểm tra
         run: ctest --test-dir build -C Release --output-on-failure
