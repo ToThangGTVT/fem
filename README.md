@@ -185,7 +185,7 @@ Nhập tọa độ: `x,y` (tuyệt đối), `@dx,dy` (tương đối), `@d<góc`
 | Phím / chuột | Chức năng |
 |---|---|
 | F3 / F7 / F8 / F9 / F12 | OSNAP / lưới / ORTHO / SNAP / nhập liệu động |
-| F1 | cửa sổ Hướng dẫn: các bước, lệnh, phím tắt, chức năng, quy ước |
+| F1 | hướng dẫn Bắt đầu; thẻ **Hướng dẫn** trên ribbon mở hướng dẫn riêng cho từng chức năng |
 | F2 | mở rộng lịch sử dòng lệnh |
 | Ctrl+1 | bảng thuộc tính |
 | Ctrl+Z / Ctrl+Y, Ctrl+S, Delete | hoàn tác / làm lại, lưu, xóa |

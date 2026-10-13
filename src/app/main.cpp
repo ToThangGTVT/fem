@@ -109,12 +109,11 @@ int main(int argc, char** argv) {
     ImVec2 smokeMouse(-1, -1); // vị trí chuột giả lập, gửi lại mỗi khung hình
     if (argc > 2 && std::string(argv[1]) == "--shot") {
         shotPath = argv[2];
-        app.showGuide = false;
         app.loadExample(argc > 3 ? std::atoi(argv[3]) : 0);
         if (argc > 4) app.view = (ResultView)std::atoi(argv[4]);
         if (argc > 5) app.contour = (ContourField)std::atoi(argv[5]);
         if (argc > 6) {
-            // cờ: e = biểu đồ bao; h = cửa sổ Hướng dẫn; s<k> = bộ kết quả thứ k; m<thanh>:<x> = đah M tại tiết diện; q<thanh>:<x> = đah Q
+            // cờ: e = biểu đồ bao; h = thẻ và cửa sổ Hướng dẫn; s<k> = bộ kết quả thứ k; m<thanh>:<x> = đah M tại tiết diện; q<thanh>:<x> = đah Q
             const std::string f = argv[6];
             app.showEnvelope = f.find('e') != std::string::npos;
             if (f.find('k') != std::string::npos) app.startCommand("CTHH");
@@ -129,7 +128,11 @@ int main(int argc, char** argv) {
             if (f.find('r') != std::string::npos) app.trainShow = true;
             if (f.find('s') != std::string::npos) app.resultSet = std::atoi(f.c_str() + f.find('s') + 1); // s<k>: bộ kết quả k
             if (f.find('g') != std::string::npos) app.showDesign = true;
-            if (f.find('h') != std::string::npos) app.showGuide = true;
+            if (f.find('h') != std::string::npos) {
+                app.ribbonTab = 5;
+                app.openGuide(GuideTopic::Start);
+                app.openGuide(GuideTopic::Influence);
+            }
             if (f.find('p') != std::string::npos) {
                 app.showDynamics = true;
                 app.dynOpt.modes = 6;

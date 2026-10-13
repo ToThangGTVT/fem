@@ -784,7 +784,7 @@ void App::propsPanel() {
     if (selNodes.empty() && selElems.empty()) {
         ImGui::TextDisabled("Chưa chọn đối tượng.");
         ImGui::SameLine();
-        if (ImGui::SmallButton("Hướng dẫn (F1)")) showGuide = true;
+        if (ImGui::SmallButton("Hướng dẫn (F1)")) openGuide(GuideTopic::Start);
         ImGui::SeparatorText("Thanh vẽ mới");
         ImGui::SetNextItemWidth(-90);
         if (ImGui::BeginCombo("Vật liệu", curMat < (int)mats.size() ? mats[curMat].c_str() : "—")) {

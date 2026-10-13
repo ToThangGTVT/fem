@@ -16,6 +16,7 @@
 #include "core/Model.h"
 #include "core/PostProcess.h"
 #include "Commands.h"
+#include "Guide.h"
 #include "imgui.h"
 
 struct SDL_Window;
@@ -176,7 +177,9 @@ struct App {
 
     // ---- cửa sổ phụ
     bool showModelPanel = true, showPropsPanel = true, showResultPanel = true, showLogPanel = false;
-    bool showMeshDialog = false, showFrameGen = false, showTrussGen = false, showGuide = true, showDemo = false;
+    bool showMeshDialog = false, showFrameGen = false, showTrussGen = false, showDemo = false;
+    std::set<int> openGuides; // các cửa sổ hướng dẫn đang mở (chỉ số GuideTopic)
+    int focusGuide = -1;
     bool resetLayout = true;
 
     std::vector<std::string> log;
@@ -246,7 +249,8 @@ struct App {
     void meshDialog();
     void frameGenDialog();
     void trussGenDialog();
-    void guidePanel();
+    void openGuide(GuideTopic t);
+    void guideWindows();
     void eigenDialog();
     void kinematicsDialog();
     void sectionDesigner();

@@ -442,7 +442,10 @@ void App::shortcuts() {
     if (Shortcut(ImGuiMod_Ctrl | ImGuiKey_S, g)) requestSave(false);
     if (Shortcut(ImGuiMod_Ctrl | ImGuiKey_O, g) && confirmDiscard(Pending::Open)) requestOpen();
     if (Shortcut(ImGuiMod_Ctrl | ImGuiKey_N, g) && confirmDiscard(Pending::New)) newModel();
-    if (Shortcut(ImGuiKey_F1, g)) showGuide = !showGuide;
+    if (Shortcut(ImGuiKey_F1, g)) {
+        if (openGuides.count((int)GuideTopic::Start)) openGuides.erase((int)GuideTopic::Start);
+        else openGuide(GuideTopic::Start);
+    }
     if (Shortcut(ImGuiKey_F5, g)) {
         analyzeNow(true);
         if (result.ok)
@@ -471,7 +474,7 @@ void App::frame() {
     if (showMeshDialog) meshDialog();
     if (showFrameGen) frameGenDialog();
     if (showTrussGen) trussGenDialog();
-    if (showGuide) guidePanel();
+    guideWindows();
     if (showEigenDialog) eigenDialog();
     if (showKinematics) kinematicsDialog();
     if (showSectionDesigner) sectionDesigner();
@@ -506,7 +509,6 @@ void App::dockLayout(unsigned int dockId) {
     ImGuiID leftBottom = ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.42f, nullptr, &left);
     ImGui::DockBuilderDockWindow("Sơ đồ kết cấu", center);
     ImGui::DockBuilderDockWindow("Thuộc tính", left);
-    ImGui::DockBuilderDockWindow("Hướng dẫn", left);
     ImGui::DockBuilderDockWindow("Mô hình", leftBottom);
     ImGui::DockBuilderDockWindow("Kết quả", right);
     ImGui::DockBuilderDockWindow("Nhật ký", right);

@@ -649,7 +649,7 @@ void App::appMenu() {
         applyTheme();
     }
     ImGui::Separator();
-    if (ImGui::MenuItem("Hướng dẫn", "F1")) showGuide = true;
+    if (ImGui::MenuItem("Hướng dẫn", "F1")) openGuide(GuideTopic::Start);
     if (ImGui::MenuItem("Thoát")) confirmDiscard(Pending::Quit);
     ImGui::EndPopup();
 }
@@ -702,8 +702,8 @@ void App::ribbon() {
     if (iconButton("redo", Icon::Redo, "Làm lại (Ctrl+Y)")) redo();
     ImGui::SameLine(0, 18);
 
-    const char* tabs[] = {"Trang chủ", "Tải trọng", "Phân tích", "Kết quả", "Xem"};
-    for (int i = 0; i < 5; ++i) {
+    const char* tabs[] = {"Trang chủ", "Tải trọng", "Phân tích", "Kết quả", "Xem", "Hướng dẫn"};
+    for (int i = 0; i < 6; ++i) {
         const ImVec2 ts = ImGui::CalcTextSize(tabs[i]);
         const ImVec2 p(ImGui::GetCursorScreenPos().x, w0.y + 2);
         ImGui::SetCursorScreenPos(p);
@@ -1048,8 +1048,74 @@ void App::ribbon() {
         endPanel("Giao diện");
         beginPanel();
         if (bigButton("Vừa\nkhung", Icon::ZoomExt, "Zoom toàn bộ")) fitRequested = true;
-        if (bigButton("Hướng\ndẫn", Icon::Help, "Cách thao tác, lệnh, phím tắt, quy ước (F1)", showGuide)) showGuide = !showGuide;
+        if (bigButton("Hướng\ndẫn", Icon::Help, "Hướng dẫn theo từng chức năng (thẻ Hướng dẫn, F1)")) ribbonTab = 5;
         endPanel("Điều hướng");
+        break;
+    }
+    case 5: { // ---------------- Hướng dẫn: mỗi nút mở cửa sổ hướng dẫn của một chức năng
+        auto big = [&](const char* label, Icon ic, GuideTopic t) {
+            if (bigButton(label, ic, guideTip(t), openGuides.count((int)t) > 0)) openGuide(t);
+        };
+        auto small = [&](const char* label, Icon ic, GuideTopic t) {
+            if (smallButton(label, ic, guideTip(t), openGuides.count((int)t) > 0)) openGuide(t);
+        };
+        beginPanel();
+        big("Bắt đầu", Icon::Help, GuideTopic::Start);
+        beginColumn();
+        small("Vẽ & chọn", Icon::Line, GuideTopic::Draw);
+        small("Danh sách lệnh", Icon::List, GuideTopic::Commands);
+        small("Phím tắt", Icon::Props, GuideTopic::Keys);
+        endColumn();
+        big("Quy ước\nđơn vị", Icon::Schema, GuideTopic::Conventions);
+        endPanel("Cơ bản");
+        beginPanel();
+        beginColumn();
+        small("Tạo khung", Icon::FrameGen, GuideTopic::FrameGen);
+        small("Tạo dàn", Icon::TrussGen, GuideTopic::TrussGen);
+        small("Tạo vòm", Icon::Influence, GuideTopic::ArchGen);
+        endColumn();
+        beginColumn();
+        small("Lưới phẳng", Icon::Mesh, GuideTopic::MeshGen);
+        small("Cọc ngang", Icon::Fix, GuideTopic::PileGen);
+        small("Gối tựa", Icon::Pin, GuideTopic::Supports);
+        endColumn();
+        beginColumn();
+        small("Vật liệu, tiết diện", Icon::Props, GuideTopic::MatSec);
+        small("Thuộc tính thanh", Icon::Line, GuideTopic::Bars);
+        endColumn();
+        endPanel("Mô hình");
+        beginPanel();
+        beginColumn();
+        small("Tải trọng", Icon::DLoad, GuideTopic::Loads);
+        small("Tổ hợp", Icon::Combo, GuideTopic::Combos);
+        endColumn();
+        endPanel("Tải trọng");
+        beginPanel();
+        beginColumn();
+        small("Tính toán", Icon::Run, GuideTopic::Static);
+        small("Cấu tạo hình học", Icon::Truss, GuideTopic::Kinematics);
+        small("Phương pháp lực", Icon::Combo, GuideTopic::ForceMethod);
+        endColumn();
+        beginColumn();
+        small("Chuyển vị ma trận", Icon::Mesh, GuideTopic::MatrixMethod);
+        small("Ổn định", Icon::Buckle, GuideTopic::Buckling);
+        small("Dao động riêng", Icon::Modal, GuideTopic::Vibration);
+        endColumn();
+        beginColumn();
+        small("Động lực học", Icon::Deformed, GuideTopic::Dynamics);
+        small("Đường ảnh hưởng", Icon::Influence, GuideTopic::Influence);
+        endColumn();
+        endPanel("Phân tích");
+        beginPanel();
+        beginColumn();
+        small("Xem kết quả", Icon::DiagM, GuideTopic::Results);
+        small("Kiểm tra thiết kế", Icon::Report, GuideTopic::Design);
+        small("Ứng suất tiết diện", Icon::Sigma, GuideTopic::SectionStress);
+        endColumn();
+        beginColumn();
+        small("Báo cáo, DXF", Icon::Save, GuideTopic::Export);
+        endColumn();
+        endPanel("Kết quả");
         break;
     }
     }
