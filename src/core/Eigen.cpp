@@ -9,6 +9,7 @@
 #include "core/Analysis.h"
 #include "core/Elements.h"
 #include "core/Mesher.h"
+#include "core/PlaneElements.h"
 
 namespace fem {
 
@@ -303,8 +304,7 @@ bool buildDenseSystem(const Model& m, const EigenOptions& opt, DenseSystem& s, s
                     b.B[i * 6 + j] = opt.kind == EigenKind::Buckling ? -KG[i][j] : M[i][j];
                 }
         } else {
-            double D[3][3], x[4], y[4];
-            planeD(mat, sub.planeMode, D);
+            double x[8], y[8];
             const int nc = el.nodeCount();
             for (int k = 0; k < nc; ++k) {
                 x[k] = sub.nodes[el.n[k]].x;
@@ -312,29 +312,15 @@ bool buildDenseSystem(const Model& m, const EigenOptions& opt, DenseSystem& s, s
                 for (int c = 0; c < 2; ++c) b.dofs.push_back(3 * el.n[k] + c);
             }
             const int n = 2 * nc;
-            b.K.assign(n * n, 0.0);
-            b.B.assign(n * n, 0.0);
-            bool ok;
-            if (el.type == ElemType::Tri3) {
-                double K[6][6];
-                ok = tri3Stiffness(x, y, D, el.t, K);
-                for (int i = 0; i < 6; ++i)
-                    for (int j = 0; j < 6; ++j) b.K[i * 6 + j] = K[i][j];
-            } else {
-                double K[8][8];
-                ok = quad4Stiffness(x, y, D, el.t, el.incompatible, K);
-                for (int i = 0; i < 8; ++i)
-                    for (int j = 0; j < 8; ++j) b.K[i * 8 + j] = K[i][j];
-            }
-            if (!ok) {
+            if (!planeStiffness(el, x, y, mat, sub.planeMode, b.K)) {
                 err = "Phần tử " + std::to_string(e + 1) + " bị suy biến.";
                 return false;
             }
+            b.B.assign(n * n, 0.0);
             if (opt.kind == EigenKind::Vibration) {
-                double area2 = 0;
-                for (int k = 0; k < nc; ++k) area2 += x[k] * y[(k + 1) % nc] - x[(k + 1) % nc] * y[k];
-                const double mn = rho * el.t * std::abs(area2) / 2 / nc; // khối lượng tập trung
-                for (int i = 0; i < n; ++i) b.B[i * n + i] = mn;
+                std::vector<double> mn;
+                planeLumpedMass(el, x, y, sub.planeMode, rho, mn);
+                for (int k = 0; k < nc; ++k) b.B[(2 * k) * n + 2 * k] = b.B[(2 * k + 1) * n + 2 * k + 1] = mn[k];
             } else {
                 planeWarn = true;
             }

@@ -350,7 +350,7 @@ SpectrumResult spectrumAnalysis(const Model& m, const EigenOptions& eo, const Sp
             c.nodeStress[n][q] = comb(v);
         }
     for (size_t e = 0; e < c.elemStress.size(); ++e)
-        for (int k = 0; k < 4; ++k)
+        for (int k = 0; k < 8; ++k)
             for (int q = 0; q < 4; ++q) {
                 for (size_t i = 0; i < nm; ++i) v[i] = res.modal[i].elemStress[e][k][q];
                 c.elemStress[e][k][q] = comb(v);

@@ -17,7 +17,8 @@ struct LoadSetResult {
     std::vector<double> U; // chuyển vị nút, 3 bậc tự do/nút (m, rad)
     std::vector<double> R; // phản lực (kN, kNm) tại bậc tự do bị khóa hoặc gối đàn hồi
     std::vector<BarResult> bars;                                   // theo phần tử (rỗng với phần tử phẳng)
-    std::vector<std::array<std::array<double, 4>, 4>> elemStress; // phần tử phẳng: (σx, σy, τxy, σz) tại từng nút
+    // phần tử phẳng: (σx, σy, τxy, σ_ngoài) tại từng nút; σ_ngoài = σz (biến dạng phẳng) hoặc σθ (đối xứng trục)
+    std::vector<std::array<std::array<double, 4>, 8>> elemStress;
     std::vector<std::array<double, 4>> nodeStress;                 // trung bình tại nút
     std::vector<int> nodeStressCount;
     double sumFx = 0, sumFy = 0; // tổng tải trọng tác dụng (kiểm tra cân bằng)

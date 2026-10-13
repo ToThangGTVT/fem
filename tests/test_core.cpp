@@ -17,6 +17,7 @@
 #include "core/Library.h"
 #include "core/Mesher.h"
 #include "core/ModelIO.h"
+#include "core/PlaneElements.h"
 #include "core/PostProcess.h"
 
 using namespace fem;
@@ -226,7 +227,9 @@ static void testExamples() {
             const double scale = 1 + std::abs(s.sumFx) + std::abs(s.sumFy);
             const std::string w = std::string(ex.name) + " / " + s.name;
             // chuyển vị cưỡng bức/nhiệt cho tổng tải = 0, phản lực tự cân bằng
-            check(std::abs(s.sumFx + s.sumRx) < 1e-6 * scale, (w + ": ΣX").c_str(), s.sumRx, -s.sumFx);
+            // đối xứng trục: lực hướng kính cân bằng bởi ứng suất vòng, không qua phản lực
+            if (m.planeMode != PlaneMode::Axisymmetric)
+                check(std::abs(s.sumFx + s.sumRx) < 1e-6 * scale, (w + ": ΣX").c_str(), s.sumRx, -s.sumFx);
             check(std::abs(s.sumFy + s.sumRy) < 1e-6 * scale, (w + ": ΣY").c_str(), s.sumRy, -s.sumFy);
             // kiểm tra nội lực đầu thanh tính lại từ phương trình cân bằng
             for (size_t e = 0; e < m.elements.size(); ++e) {
@@ -1387,6 +1390,254 @@ static void testDxfReport() {
     }
 }
 
+// Nút nằm trên biên đa giác lồi cx, cy (4 góc)
+static bool onPatchBoundary(const Node& p, const double cx[4], const double cy[4]) {
+    for (int k = 0; k < 4; ++k) {
+        const double ax = cx[k], ay = cy[k], bx = cx[(k + 1) % 4], by = cy[(k + 1) % 4];
+        const double L = std::hypot(bx - ax, by - ay);
+        if (std::abs((bx - ax) * (p.y - ay) - (by - ay) * (p.x - ax)) / L < 1e-9) return true;
+    }
+    return false;
+}
+
+static void testQuadraticPatch() {
+    std::puts("Patch test phần tử bậc hai T6, Q8 (chuyển vị tuyến tính trên biên, lưới méo)");
+    const double cx[4] = {0, 4, 3.6, 0.3}, cy[4] = {0, 0.4, 2.7, 2.0};
+    const double E = 2e8, nu = 0.3, a = 1e-3, b = 0.5e-3, c = -0.3e-3, d = 2e-3; // ux = a x + b y, uy = c x + d y
+    for (int mode = 0; mode < 2; ++mode)
+        for (ElemType type : {ElemType::Tri6, ElemType::Quad8}) {
+            Model m;
+            Material mat;
+            mat.E = E;
+            mat.nu = nu;
+            m.materials.push_back(mat);
+            m.planeMode = mode == 0 ? PlaneMode::Stress : PlaneMode::Strain;
+            meshPatch(m, cx, cy, 3, 2, type, 0, 0.4);
+            m.cases.push_back({"TH1"});
+            for (size_t i = 0; i < m.nodes.size(); ++i) {
+                const Node& p = m.nodes[i];
+                if (!onPatchBoundary(p, cx, cy)) continue;
+                fix(m, (int)i, true, true, false);
+                m.cases[0].disp.push_back({(int)i, UX, a * p.x + b * p.y});
+                m.cases[0].disp.push_back({(int)i, UY, c * p.x + d * p.y});
+            }
+            auto r = run(m);
+            if (!r.ok) continue;
+            double du = 0;
+            for (size_t i = 0; i < m.nodes.size(); ++i) {
+                const Node& p = m.nodes[i];
+                du = std::max(du, std::abs(r.sets[0].U[3 * i] - (a * p.x + b * p.y)));
+                du = std::max(du, std::abs(r.sets[0].U[3 * i + 1] - (c * p.x + d * p.y)));
+            }
+            double sx, sy, txy, sz = 0;
+            if (mode == 0) {
+                const double k = E / (1 - nu * nu);
+                sx = k * (a + nu * d);
+                sy = k * (d + nu * a);
+            } else {
+                const double k = E / ((1 + nu) * (1 - 2 * nu));
+                sx = k * ((1 - nu) * a + nu * d);
+                sy = k * ((1 - nu) * d + nu * a);
+                sz = nu * (sx + sy);
+            }
+            txy = E / (2 * (1 + nu)) * (b + c);
+            double ds = 0;
+            for (size_t e = 0; e < m.elements.size(); ++e)
+                for (int k = 0; k < m.elements[e].nodeCount(); ++k) {
+                    const auto& st = r.sets[0].elemStress[e][k];
+                    ds = std::max({ds, std::abs(st[0] - sx), std::abs(st[1] - sy), std::abs(st[2] - txy), std::abs(st[3] - sz)});
+                }
+            const std::string nm = std::string(type == ElemType::Tri6 ? "T6" : "Q8") + (mode == 0 ? " ƯSP" : " BDP");
+            check(du < 1e-12, (nm + ": chuyển vị nút trong chính xác").c_str(), du, 0);
+            check(ds < 1e-6 * std::abs(sy), (nm + ": ứng suất không đổi chính xác").c_str(), ds, 0);
+        }
+}
+
+static void testQuadraticCantilever() {
+    std::puts("Công-xôn T6, Q8 so với lý thuyết dầm (Timoshenko), tải cắt đều ở đầu tự do");
+    const double L = 10, H = 1, t = 1, P = 1, E = 1e6, nu = 0.25;
+    const double I = t * H * H * H / 12, G = E / (2 * (1 + nu));
+    const double exact = P * L * L * L / (3 * E * I) + P * L / (5.0 / 6.0 * G * H * t);
+    for (ElemType type : {ElemType::Quad8, ElemType::Tri6}) {
+        Model m;
+        Material mat;
+        mat.E = E;
+        mat.nu = nu;
+        m.materials.push_back(mat);
+        meshRectangle(m, 0, 0, L, H, 10, 2, type, 0, t);
+        m.cases.push_back({"TH1"});
+        std::vector<int> tip;
+        int mid = -1;
+        for (size_t i = 0; i < m.nodes.size(); ++i) {
+            const Node& p = m.nodes[i];
+            if (std::abs(p.x) < 1e-9) fix(m, (int)i, true, std::abs(p.y - H / 2) < 1e-9, false);
+            if (std::abs(p.x - L) < 1e-9) {
+                tip.push_back((int)i);
+                if (std::abs(p.y - H / 2) < 1e-9) mid = (int)i;
+            }
+        }
+        EdgeLoadSpec es;
+        es.qy = -P / H;
+        applyEdgeLoad(m, 0, tip, es);
+        auto r = run(m);
+        if (!r.ok || mid < 0) continue;
+        const double v = -r.sets[0].U[3 * mid + 1];
+        near(type == ElemType::Quad8 ? "Q8 (10×2): độ võng đầu (sai số < 2%)" : "T6 (10×2): độ võng đầu (sai số < 3%)", v,
+             exact, type == ElemType::Quad8 ? 0.02 : 0.03);
+    }
+}
+
+static void testAxisymmetric() {
+    std::puts("Đối xứng trục: trụ dày chịu áp lực trong (Lamé, biến dạng phẳng εz = 0)");
+    const double a = 1, b = 2, p = 1000, E = 2e7, nu = 0.3;
+    const double sthA = p * (b * b + a * a) / (b * b - a * a);
+    const double uA = (1 + nu) / E * p * a * a / (b * b - a * a) * ((1 - 2 * nu) * a + b * b / a);
+    for (ElemType type : {ElemType::Quad8, ElemType::Tri6, ElemType::Quad4}) {
+        Model m;
+        Material mat;
+        mat.E = E;
+        mat.nu = nu;
+        m.materials.push_back(mat);
+        m.planeMode = PlaneMode::Axisymmetric;
+        meshRectangle(m, a, 0, b - a, 0.1, type == ElemType::Quad4 ? 40 : 10, 1, type, 0, 1, false);
+        m.cases.push_back({"TH1"});
+        std::vector<int> inner;
+        for (size_t i = 0; i < m.nodes.size(); ++i) {
+            fix(m, (int)i, false, true, false);
+            if (std::abs(m.nodes[i].x - a) < 1e-9) inner.push_back((int)i);
+        }
+        EdgeLoadSpec es;
+        es.pressure = true;
+        es.p0 = p;
+        es.clipNegative = false;
+        applyEdgeLoad(m, 0, inner, es);
+        double F = 0;
+        for (auto& l : m.cases[0].nodal) F += l.F[0];
+        const char* nm = type == ElemType::Quad8 ? "Q8" : type == ElemType::Tri6 ? "T6" : "Q4";
+        near((std::string(nm) + ": tổng lực áp lực = p·2πa·h").c_str(), F, p * 2 * M_PI * a * 0.1, 1e-12);
+        auto r = run(m);
+        if (!r.ok) continue;
+        const int n0 = inner[0];
+        near((std::string(nm) + ": u(a) theo Lamé").c_str(), r.sets[0].U[3 * n0], uA, type == ElemType::Quad4 ? 2e-3 : 1e-4);
+        near((std::string(nm) + ": σθ(a) = p(b²+a²)/(b²−a²)").c_str(), r.sets[0].nodeStress[n0][3], sthA,
+             type == ElemType::Quad4 ? 0.03 : 0.01);
+        near((std::string(nm) + ": σr(a) = −p").c_str(), r.sets[0].nodeStress[n0][0], -p, 0.0, type == ElemType::Quad4 ? 0.08 * p : 0.03 * p);
+    }
+    // patch test đối xứng trục (có nút trên trục): ur = α r, uz = β z ⇒ εr = εθ = α, εz = β
+    for (ElemType type : {ElemType::Tri3, ElemType::Quad4, ElemType::Tri6, ElemType::Quad8}) {
+        Model m;
+        Material mat;
+        mat.E = E;
+        mat.nu = nu;
+        m.materials.push_back(mat);
+        m.planeMode = PlaneMode::Axisymmetric;
+        const double cx[4] = {0, 2, 1.7, 0}, cy[4] = {0, 0.3, 1.8, 1.5};
+        meshPatch(m, cx, cy, 3, 3, type, 0, 1, false);
+        m.cases.push_back({"TH1"});
+        const double al = 1e-3, be = -2e-3;
+        for (size_t i = 0; i < m.nodes.size(); ++i) {
+            const Node& q = m.nodes[i];
+            if (!onPatchBoundary(q, cx, cy)) continue;
+            fix(m, (int)i, true, true, false);
+            m.cases[0].disp.push_back({(int)i, UX, al * q.x});
+            m.cases[0].disp.push_back({(int)i, UY, be * q.y});
+        }
+        auto r = run(m);
+        if (!r.ok) continue;
+        const double lam = E * nu / ((1 + nu) * (1 - 2 * nu)), mu = E / (2 * (1 + nu));
+        const double tr = 2 * al + be, sr = lam * tr + 2 * mu * al, sz = lam * tr + 2 * mu * be;
+        double ds = 0;
+        for (size_t e = 0; e < m.elements.size(); ++e)
+            for (int k = 0; k < m.elements[e].nodeCount(); ++k) {
+                const auto& st = r.sets[0].elemStress[e][k];
+                ds = std::max({ds, std::abs(st[0] - sr), std::abs(st[1] - sz), std::abs(st[2]), std::abs(st[3] - sr)});
+            }
+        const std::string nm = type == ElemType::Tri3 ? "T3" : type == ElemType::Quad4 ? "Q4" : type == ElemType::Tri6 ? "T6" : "Q8";
+        check(ds < 1e-6 * std::abs(sz), (nm + ": patch test đối xứng trục").c_str(), ds, 0);
+    }
+}
+
+static void testQuadraticMisc() {
+    std::puts("Phần tử bậc hai: tải cạnh, ghi/đọc file, dao động riêng");
+    {
+        Model m;
+        m.materials.push_back(Material());
+        meshRectangle(m, 0, 0, 3, 1, 3, 1, ElemType::Quad8, 0, 0.5);
+        m.cases.push_back({"TH1"});
+        std::vector<int> top;
+        for (size_t i = 0; i < m.nodes.size(); ++i)
+            if (std::abs(m.nodes[i].y - 1) < 1e-9) top.push_back((int)i);
+        EdgeLoadSpec es;
+        es.qy = -6;
+        const int ne = applyEdgeLoad(m, 0, top, es);
+        check(ne == 3, "Q8: số cạnh mép trên", ne, 3);
+        double sum = 0, corner = 0, midside = 0;
+        for (auto& l : m.cases[0].nodal) {
+            sum += l.F[1];
+            if (std::abs(m.nodes[l.node].x - 0.5) < 1e-9) midside = l.F[1];
+            if (std::abs(m.nodes[l.node].x) < 1e-9) corner = l.F[1];
+        }
+        near("Q8: tổng tải = q·L", sum, -18, 1e-12);
+        near("Q8: nút giữa cạnh nhận 2/3 qa", midside, -6 * 2.0 / 3, 1e-12);
+        near("Q8: nút góc biên nhận 1/6 qa", corner, -6 / 6.0, 1e-12);
+    }
+    {
+        Model m;
+        m.title = "bậc hai";
+        m.materials.push_back(Material());
+        m.planeMode = PlaneMode::Axisymmetric;
+        meshRectangle(m, 0, 0, 2, 1, 2, 2, ElemType::Quad8, 0, 1);
+        meshRectangle(m, 0, 1, 2, 1, 2, 1, ElemType::Tri6, 0, 1);
+        m.cases.push_back({"TH1"});
+        for (size_t i = 0; i < m.nodes.size(); ++i)
+            if (m.nodes[i].y < 1e-9) fix(m, (int)i, false, true, false);
+        m.cases[0].selfWeight = true;
+        const std::string text = modelToText(m);
+        Model m2;
+        std::string err;
+        const bool ok = modelFromText(text, m2, err);
+        check(ok && m2.planeMode == PlaneMode::Axisymmetric && m2.elements.size() == m.elements.size() &&
+                  m2.elements.back().type == ElemType::Tri6 && m2.elements[0].type == ElemType::Quad8,
+              "ghi/đọc TRI6, QUAD8, PLANE AXISYM", 0, 0);
+        check(ok && modelToText(m2) == text, "văn bản ghi lại trùng khớp", 0, 0);
+        auto r1 = run(m);
+        auto r2 = run(m2);
+        double d = 0;
+        if (r1.ok && r2.ok)
+            for (size_t i = 0; i < r1.sets[0].U.size(); ++i) d = std::max(d, std::abs(r1.sets[0].U[i] - r2.sets[0].U[i]));
+        check(r1.ok && r2.ok && d < 1e-15, "kết quả sau khi đọc lại", d, 0);
+        // trọng lượng bản thân tổng = γ·V (thể tích tròn xoay π r² h)
+        if (r1.ok) {
+            double ry = 0;
+            for (size_t i = 0; i < m.nodes.size(); ++i) ry += r1.sets[0].R[3 * i + 1];
+            near("Đối xứng trục: phản lực = γ·π r²·h", ry, m.materials[0].gamma * M_PI * 4 * 2, 1e-9);
+        }
+    }
+    {
+        // công-xôn mảnh Q8: tần số riêng thứ nhất so với dầm Euler–Bernoulli
+        const double L = 10, H = 0.5, E = 3e7, gamma = 25;
+        Model m;
+        Material mat;
+        mat.E = E;
+        mat.nu = 0.2;
+        mat.gamma = gamma;
+        m.materials.push_back(mat);
+        meshRectangle(m, 0, 0, L, H, 20, 2, ElemType::Quad8, 0, 1);
+        m.cases.push_back({"TH1"});
+        for (size_t i = 0; i < m.nodes.size(); ++i)
+            if (m.nodes[i].x < 1e-9) fix(m, (int)i, true, true, false);
+        EigenOptions o;
+        o.kind = EigenKind::Vibration;
+        o.modes = 2;
+        auto r = eigenAnalysis(m, o);
+        check(r.ok, r.error.c_str(), 0, 0);
+        if (r.ok) {
+            const double EI = E * H * H * H / 12, rhoA = gamma / 9.81 * H;
+            near("Q8: ω1 công-xôn (sai số < 2%)", r.modes[0].omega, 1.875104 * 1.875104 * std::sqrt(EI / (rhoA * std::pow(L, 4))), 0.02);
+        }
+    }
+}
+
 int main() {
     testDxfReport();
     testDesign();
@@ -1417,6 +1668,10 @@ int main() {
     testWinkler();
     testPatch();
     testPlaneCantilever();
+    testQuadraticPatch();
+    testQuadraticCantilever();
+    testAxisymmetric();
+    testQuadraticMisc();
     testMechanism();
     testSubdivide();
     testExamples();

@@ -76,7 +76,7 @@ std::string modelToText(const Model& m) {
     o << "FEM2D 1\n";
     o << "# Đơn vị: kN, m, °C. Chỉ số đánh từ 1.\n";
     o << "TITLE " << quote(m.title) << "\n";
-    o << "PLANE " << (m.planeMode == PlaneMode::Stress ? "STRESS" : "STRAIN") << "\n";
+    o << "PLANE " << (m.planeMode == PlaneMode::Stress ? "STRESS" : m.planeMode == PlaneMode::Strain ? "STRAIN" : "AXISYM") << "\n";
     if (m.secondOrder) o << "ANALYSIS PDELTA 1\n";
     o << "\n";
     o << "# MATERIAL tên E nu alpha gamma [loại(1 thép, 2 bê tông) f/Rb Rbt (MPa)]\n";
@@ -103,7 +103,7 @@ std::string modelToText(const Model& m) {
     }
     o << "\n# NODE x y\n";
     for (const auto& n : m.nodes) o << "NODE " << num(n.x) << " " << num(n.y) << "\n";
-    o << "\n# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf [kG chỉ_nén] | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im\n";
+    o << "\n# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf [kG chỉ_nén] | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im | TRI6 n1..n6 mat t | QUAD8 n1..n8 mat t\n";
     for (const auto& e : m.elements) {
         switch (e.type) {
         case ElemType::Truss:
@@ -122,6 +122,12 @@ std::string modelToText(const Model& m) {
         case ElemType::Quad4:
             o << "QUAD4 " << e.n[0] + 1 << " " << e.n[1] + 1 << " " << e.n[2] + 1 << " " << e.n[3] + 1 << " "
               << e.mat + 1 << " " << num(e.t) << " " << (int)e.incompatible << "\n";
+            break;
+        case ElemType::Tri6:
+        case ElemType::Quad8:
+            o << (e.type == ElemType::Tri6 ? "TRI6" : "QUAD8");
+            for (int k = 0; k < e.nodeCount(); ++k) o << " " << e.n[k] + 1;
+            o << " " << e.mat + 1 << " " << num(e.t) << "\n";
             break;
         }
     }
@@ -181,7 +187,11 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
         auto idx = [&](size_t i) { return i < t.size() ? std::atoi(t[i].c_str()) - 1 : -1; };
         if (k == "FEM2D") continue;
         if (k == "TITLE") m.title = t.size() > 1 ? t[1] : "";
-        else if (k == "PLANE") m.planeMode = (t.size() > 1 && t[1] == "STRAIN") ? PlaneMode::Strain : PlaneMode::Stress;
+        else if (k == "PLANE")
+            m.planeMode = t.size() < 2 ? PlaneMode::Stress
+                          : t[1] == "STRAIN" ? PlaneMode::Strain
+                          : t[1] == "AXISYM" ? PlaneMode::Axisymmetric
+                                             : PlaneMode::Stress;
         else if (k == "ANALYSIS") {
             if (t.size() > 2 && t[1] == "PDELTA") m.secondOrder = d(2) != 0;
         }
@@ -251,6 +261,15 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
             for (int i = 0; i < 3; ++i) e.n[i] = idx(1 + i);
             e.mat = idx(4);
             e.t = d(5);
+            m.elements.push_back(e);
+        } else if (k == "TRI6" || k == "QUAD8") {
+            Element e;
+            e.type = k == "TRI6" ? ElemType::Tri6 : ElemType::Quad8;
+            const int nc = e.nodeCount();
+            if (!need(nc + 3)) return fail(k + " thiếu tham số");
+            for (int i = 0; i < nc; ++i) e.n[i] = idx(1 + i);
+            e.mat = idx(nc + 1);
+            e.t = d(nc + 2);
             m.elements.push_back(e);
         } else if (k == "QUAD4") {
             if (!need(7)) return fail("QUAD4 thiếu tham số");
@@ -414,13 +433,15 @@ std::string resultReport(const Model& m, const AnalysisResult& r) {
         for (size_t i = 0; i < m.nodes.size(); ++i) {
             if (s.nodeStressCount.empty() || s.nodeStressCount[i] == 0) continue;
             if (!header) {
-                o << "\nỨNG SUẤT TẠI NÚT (trung bình, MPa)\n   Nút        σx        σy       τxy        σ1        σ2  σ_vonMises\n";
+                o << (m.planeMode == PlaneMode::Axisymmetric
+                          ? "\nỨNG SUẤT TẠI NÚT (trung bình, MPa)\n   Nút        σr        σz       τrz        σθ        σ1        σ2  σ_vonMises\n"
+                          : "\nỨNG SUẤT TẠI NÚT (trung bình, MPa)\n   Nút        σx        σy       τxy        σz        σ1        σ2  σ_vonMises\n");
                 header = true;
             }
             const auto& v = s.nodeStress[i];
             StressInfo si = stressInfo(v[0], v[1], v[2], v[3]);
-            std::snprintf(b, sizeof b, "%6zu %9.4f %9.4f %9.4f %9.4f %9.4f %11.4f\n", i + 1, si.sx * 1e-3, si.sy * 1e-3,
-                          si.txy * 1e-3, si.s1 * 1e-3, si.s2 * 1e-3, si.vonMises * 1e-3);
+            std::snprintf(b, sizeof b, "%6zu %9.4f %9.4f %9.4f %9.4f %9.4f %9.4f %11.4f\n", i + 1, si.sx * 1e-3, si.sy * 1e-3,
+                          si.txy * 1e-3, si.sz * 1e-3, si.s1 * 1e-3, si.s2 * 1e-3, si.vonMises * 1e-3);
             o << b;
         }
     }

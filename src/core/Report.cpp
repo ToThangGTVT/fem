@@ -73,15 +73,16 @@ struct Svg {
 void drawStructure(Svg& s, const Model& m, bool faint) {
     const char* col = faint ? "#9aa3ad" : "#1d2530";
     for (const auto& el : m.elements) {
-        const int nc = el.nodeCount();
+        int ol[8];
+        const int nc = el.outline(ol);
         if (el.isBar()) {
             const Node& a = m.nodes[el.n[0]];
             const Node& b = m.nodes[el.n[1]];
             s.line(a.x, a.y, b.x, b.y, el.type == ElemType::Truss ? "#3a6ea5" : col, faint ? 1.2 : 2.2);
         } else {
             for (int k = 0; k < nc; ++k) {
-                const Node& a = m.nodes[el.n[k]];
-                const Node& b = m.nodes[el.n[(k + 1) % nc]];
+                const Node& a = m.nodes[el.n[ol[k]]];
+                const Node& b = m.nodes[el.n[ol[(k + 1) % nc]]];
                 s.line(a.x, a.y, b.x, b.y, "#b8c2cf", 0.8);
             }
         }
@@ -165,8 +166,10 @@ std::string deformedSvg(const Model& m, const LoadSetResult& rs) {
             s.o << "<polyline points='" << pts << "' fill='none' stroke='#c2268f' stroke-width='1.8'/>\n";
         } else {
             std::string pts;
-            for (int k = 0; k < el.nodeCount(); ++k) {
-                const int i = el.n[k];
+            int ol[8];
+            const int nc = el.outline(ol);
+            for (int k = 0; k < nc; ++k) {
+                const int i = el.n[ol[k]];
                 pts += fmt("%.1f,%.1f ", s.X(m.nodes[i].x + rs.U[3 * i] * S), s.Y(m.nodes[i].y + rs.U[3 * i + 1] * S));
             }
             s.o << "<polygon points='" << pts << "' fill='none' stroke='#c2268f' stroke-width='0.8'/>\n";
@@ -295,15 +298,18 @@ std::string htmlReport(const Model& m, const AnalysisResult& r, const HtmlReport
             o << "</table>\n";
         }
         if (np) {
-            o << "<h3>Ứng suất tại nút (trung bình, MPa)</h3><table><tr><th>Nút</th><th>σx</th><th>σy</th><th>τxy</th><th>σ1</th>"
-                 "<th>σ2</th><th>σvM</th></tr>\n";
+            const bool axi = m.planeMode == PlaneMode::Axisymmetric;
+            o << (axi ? "<h3>Ứng suất tại nút (trung bình, MPa)</h3><table><tr><th>Nút</th><th>σr</th><th>σz</th><th>τrz</th><th>σθ</th>"
+                      : "<h3>Ứng suất tại nút (trung bình, MPa)</h3><table><tr><th>Nút</th><th>σx</th><th>σy</th><th>τxy</th><th>σz</th>")
+              << "<th>σ1</th><th>σ2</th><th>σvM</th></tr>\n";
             int rows = 0;
             for (size_t i = 0; i < m.nodes.size() && rows < opt.maxRows; ++i) {
                 if (s.nodeStressCount[i] == 0) continue;
                 const auto& v = s.nodeStress[i];
                 const StressInfo si = stressInfo(v[0], v[1], v[2], v[3]);
-                o << fmt("<tr><td>%zu</td><td>%.3f</td><td>%.3f</td><td>%.3f</td><td>%.3f</td><td>%.3f</td><td>%.3f</td></tr>\n", i + 1,
-                         si.sx * 1e-3, si.sy * 1e-3, si.txy * 1e-3, si.s1 * 1e-3, si.s2 * 1e-3, si.vonMises * 1e-3);
+                o << fmt("<tr><td>%zu</td><td>%.3f</td><td>%.3f</td><td>%.3f</td><td>%.3f</td><td>%.3f</td><td>%.3f</td><td>%.3f</td></tr>\n",
+                         i + 1, si.sx * 1e-3, si.sy * 1e-3, si.txy * 1e-3, si.sz * 1e-3, si.s1 * 1e-3, si.s2 * 1e-3,
+                         si.vonMises * 1e-3);
                 ++rows;
             }
             o << "</table>\n";

@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <queue>
 
+#include "core/PlaneElements.h"
 #include "core/Skyline.h"
 
 namespace fem {
@@ -28,7 +29,7 @@ struct ElemData {
     std::vector<double> K; // ma trận độ cứng tổng thể (n×n)
     BarProps bar;
     double D[3][3];
-    double x[4], y[4];
+    double x[8], y[8];
 };
 
 struct Coupling {
@@ -62,6 +63,10 @@ std::string validate(const Model& m) {
         } else {
             if (el.t <= 0) return fmt("Phần tử %d: chiều dày phải > 0.", id);
             if (mat.nu <= -1 || mat.nu >= 0.5) return fmt("Vật liệu \"%s\": hệ số Poisson phải trong (−1; 0,5).", mat.name.c_str());
+            if (m.planeMode == PlaneMode::Axisymmetric)
+                for (int k = 0; k < el.nodeCount(); ++k)
+                    if (m.nodes[el.n[k]].x < -1e-12)
+                        return fmt("Bài toán đối xứng trục: phần tử %d có nút với r = x < 0.", id);
         }
     }
     for (const auto& c : m.combos)
@@ -129,20 +134,7 @@ bool elementMatrix(const Model& m, int e, ElemData& d) {
             for (int j = 0; j < 6; ++j) d.K[i * 6 + j] = Kg[i][j];
         return true;
     }
-    const int n = 2 * el.nodeCount();
-    d.K.resize(n * n);
-    if (el.type == ElemType::Tri3) {
-        double K[6][6];
-        if (!tri3Stiffness(d.x, d.y, d.D, el.t, K)) return false;
-        for (int i = 0; i < 6; ++i)
-            for (int j = 0; j < 6; ++j) d.K[i * 6 + j] = K[i][j];
-    } else {
-        double K[8][8];
-        if (!quad4Stiffness(d.x, d.y, d.D, el.t, el.incompatible, K)) return false;
-        for (int i = 0; i < 8; ++i)
-            for (int j = 0; j < 8; ++j) d.K[i * 8 + j] = K[i][j];
-    }
-    return true;
+    return planeStiffness(el, d.x, d.y, m.materials[el.mat], m.planeMode, d.K);
 }
 
 } // namespace
@@ -181,7 +173,8 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
                 for (int c = 0; c < 2; ++c) d.dofs.push_back(3 * el.n[k] + c);
         }
         if (!elementMatrix(m, e, d)) {
-            res.error = fmt("Phần tử %d bị suy biến (diện tích bằng 0 hoặc tứ giác lõm/xoắn).", e + 1);
+            res.error = fmt("Phần tử %d bị suy biến (diện tích bằng 0, tứ giác lõm/xoắn%s).", e + 1,
+                            m.planeMode == PlaneMode::Axisymmetric ? ", hoặc nằm ở phía r < 0" : "");
             return res;
         }
         const int n = (int)d.dofs.size();
@@ -208,6 +201,16 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
     std::vector<char> used(nn, 0);
     for (const auto& e : m.elements)
         for (int k = 0; k < e.nodeCount(); ++k) used[e.n[k]] = 1;
+    if (m.planeMode == PlaneMode::Axisymmetric) {
+        double x0, y0, x1, y1;
+        m.bounds(x0, y0, x1, y1);
+        const double tol = 1e-9 * std::max({1.0, x1 - x0, y1 - y0});
+        for (const auto& e : m.elements)
+            if (e.isPlane())
+                for (int k = 0; k < e.nodeCount(); ++k)
+                    if (std::abs(m.nodes[e.n[k]].x) <= tol && res.dofState[3 * e.n[k]] == DofFree)
+                        res.dofState[3 * e.n[k]] = DofAuto; // trên trục đối xứng: u_r = 0
+    }
     for (int d = 0; d < ndof; ++d) {
         if (res.dofState[d] != DofFree || hasStiff[d]) continue;
         res.dofState[d] = DofAuto;
@@ -338,16 +341,7 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
                 barGlobal(eds[e].bar, bl[e], Kg, fg);
                 feq[e].assign(fg.begin(), fg.end());
             } else if (sw != 0) {
-                const double by = -sw * mat.gamma;
-                if (el.type == ElemType::Tri3) {
-                    double f[6];
-                    tri3BodyForce(eds[e].x, eds[e].y, el.t, 0, by, f);
-                    feq[e].assign(f, f + 6);
-                } else {
-                    double f[8];
-                    quad4BodyForce(eds[e].x, eds[e].y, el.t, 0, by, f);
-                    feq[e].assign(f, f + 8);
-                }
+                planeBodyForce(el, eds[e].x, eds[e].y, m.planeMode, 0, -sw * mat.gamma, feq[e]);
             }
             for (size_t k = 0; k < feq[e].size(); ++k) F[eds[e].dofs[k]] += feq[e][k];
         }
@@ -396,25 +390,13 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
                 out.foundRx += fx;
                 out.foundRy += fy;
             } else {
-                const double nu = m.materials[el.mat].nu;
-                auto put = [&](int k, double sx, double sy, double txy) {
-                    const double sz = (m.planeMode == PlaneMode::Strain) ? nu * (sx + sy) : 0.0;
-                    out.elemStress[e][k] = {sx, sy, txy, sz};
+                std::array<std::array<double, 4>, 8> sig;
+                planeStress(el, d.x, d.y, m.materials[el.mat], m.planeMode, ue.data(), sig);
+                for (int k = 0; k < el.nodeCount(); ++k) {
+                    out.elemStress[e][k] = sig[k];
                     auto& ns = out.nodeStress[el.n[k]];
-                    ns[0] += sx;
-                    ns[1] += sy;
-                    ns[2] += txy;
-                    ns[3] += sz;
+                    for (int q = 0; q < 4; ++q) ns[q] += sig[k][q];
                     out.nodeStressCount[el.n[k]]++;
-                };
-                if (el.type == ElemType::Tri3) {
-                    double sig[3];
-                    tri3Stress(d.x, d.y, d.D, ue.data(), sig);
-                    for (int k = 0; k < 3; ++k) put(k, sig[0], sig[1], sig[2]);
-                } else {
-                    double sig[4][3];
-                    quad4Stress(d.x, d.y, d.D, el.t, el.incompatible, ue.data(), sig);
-                    for (int k = 0; k < 4; ++k) put(k, sig[k][0], sig[k][1], sig[k][2]);
                 }
             }
         }

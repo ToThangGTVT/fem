@@ -126,7 +126,7 @@ NODE 1.5 12
 NODE 1.75 12
 NODE 2 12
 
-# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf [kG chỉ_nén] | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im
+# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf [kG chỉ_nén] | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im | TRI6 n1..n6 mat t | QUAD8 n1..n8 mat t
 TRI3 1 2 11 1 1
 TRI3 1 11 10 1 1
 TRI3 2 3 11 1 1

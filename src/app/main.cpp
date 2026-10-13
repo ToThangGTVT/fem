@@ -113,7 +113,7 @@ int main(int argc, char** argv) {
         if (argc > 4) app.view = (ResultView)std::atoi(argv[4]);
         if (argc > 5) app.contour = (ContourField)std::atoi(argv[5]);
         if (argc > 6) {
-            // cờ: e = biểu đồ bao; m<thanh>:<x> = đah M tại tiết diện; q<thanh>:<x> = đah Q
+            // cờ: e = biểu đồ bao; s<k> = bộ kết quả thứ k; m<thanh>:<x> = đah M tại tiết diện; q<thanh>:<x> = đah Q
             const std::string f = argv[6];
             app.showEnvelope = f.find('e') != std::string::npos;
             if (f.find('k') != std::string::npos) app.startCommand("CTHH");
@@ -126,6 +126,7 @@ int main(int argc, char** argv) {
                 app.view = ResultView::M;
             }
             if (f.find('r') != std::string::npos) app.trainShow = true;
+            if (f.find('s') != std::string::npos) app.resultSet = std::atoi(f.c_str() + f.find('s') + 1); // s<k>: bộ kết quả k
             if (f.find('g') != std::string::npos) app.showDesign = true;
             if (f.find('p') != std::string::npos) {
                 app.showDynamics = true;

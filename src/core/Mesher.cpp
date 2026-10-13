@@ -5,6 +5,7 @@
 #include "core/SectionGeom.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <functional>
 #include <map>
@@ -19,43 +20,62 @@ std::vector<int> meshPatch(Model& m, const double cx[4], const double cy[4], int
     double scale = 0;
     for (int i = 0; i < 4; ++i) scale = std::max({scale, std::abs(cx[i]), std::abs(cy[i])});
     const double tol = 1e-9 * std::max(scale, 1.0);
+    // nút trên lưới nửa bước (I, J) ∈ [0, 2nx]×[0, 2ny]; nút góc phần tử ở chỉ số chẵn, nút giữa cạnh có chỉ số lẻ
+    std::map<std::pair<int, int>, int> made;
+    auto node = [&](int I, int J) {
+        auto it = made.find({I, J});
+        if (it != made.end()) return it->second;
+        const double u = 0.5 * I / nx, v = 0.5 * J / ny;
+        const double N[4] = {(1 - u) * (1 - v), u * (1 - v), u * v, (1 - u) * v};
+        double x = 0, y = 0;
+        for (int k = 0; k < 4; ++k) {
+            x += N[k] * cx[k];
+            y += N[k] * cy[k];
+        }
+        const int id = m.addNode(x, y, tol);
+        made[{I, J}] = id;
+        return id;
+    };
     std::vector<int> grid((nx + 1) * (ny + 1));
     for (int j = 0; j <= ny; ++j)
-        for (int i = 0; i <= nx; ++i) {
-            const double u = (double)i / nx, v = (double)j / ny;
-            const double N[4] = {(1 - u) * (1 - v), u * (1 - v), u * v, (1 - u) * v};
-            double x = 0, y = 0;
-            for (int k = 0; k < 4; ++k) {
-                x += N[k] * cx[k];
-                y += N[k] * cy[k];
-            }
-            grid[j * (nx + 1) + i] = m.addNode(x, y, tol);
-        }
+        for (int i = 0; i <= nx; ++i) grid[j * (nx + 1) + i] = node(2 * i, 2 * j);
+    const bool quad = type == ElemType::Quad4 || type == ElemType::Quad8;
+    const bool second = type == ElemType::Tri6 || type == ElemType::Quad8;
     for (int j = 0; j < ny; ++j)
         for (int i = 0; i < nx; ++i) {
-            const int a = grid[j * (nx + 1) + i], b = grid[j * (nx + 1) + i + 1];
-            const int c = grid[(j + 1) * (nx + 1) + i + 1], d = grid[(j + 1) * (nx + 1) + i];
+            // góc theo tọa độ nửa bước: a(0,0) b(2,0) c(2,2) d(0,2)
+            const int I = 2 * i, J = 2 * j;
+            const std::array<std::pair<int, int>, 4> C = {{{I, J}, {I + 2, J}, {I + 2, J + 2}, {I, J + 2}}};
             Element e;
             e.mat = mat;
             e.t = t;
             e.incompatible = incompatible;
-            if (type == ElemType::Quad4) {
-                e.type = ElemType::Quad4;
-                e.n = {a, b, c, d};
+            e.n.fill(-1);
+            auto add = [&](std::initializer_list<int> corners) {
+                std::vector<std::pair<int, int>> cs;
+                for (int k : corners) cs.push_back(C[k]);
+                const int nc = (int)cs.size();
+                for (int k = 0; k < nc; ++k) e.n[k] = node(cs[k].first, cs[k].second);
+                if (second)
+                    for (int k = 0; k < nc; ++k) {
+                        const auto& p = cs[k];
+                        const auto& q = cs[(k + 1) % nc];
+                        e.n[nc + k] = node((p.first + q.first) / 2, (p.second + q.second) / 2);
+                    }
                 m.elements.push_back(e);
+            };
+            if (quad) {
+                e.type = type;
+                add({0, 1, 2, 3});
             } else {
-                e.type = ElemType::Tri3;
+                e.type = second ? ElemType::Tri6 : ElemType::Tri3;
                 // đường chéo xen kẽ để lưới đối xứng hơn
                 if ((i + j) % 2 == 0) {
-                    e.n = {a, b, c, -1};
-                    m.elements.push_back(e);
-                    e.n = {a, c, d, -1};
-                    m.elements.push_back(e);
+                    add({0, 1, 2});
+                    add({0, 2, 3});
                 } else {
-                    e.n = {a, b, d, -1};
-                    m.elements.push_back(e);
-                    e.n = {b, c, d, -1};
-                    m.elements.push_back(e);
+                    add({0, 1, 3});
+                    add({1, 2, 3});
                 }
             }
         }
@@ -142,15 +162,17 @@ void subdivideBar(Model& m, int e, int n) {
 int applyEdgeLoad(Model& m, int caseIndex, const std::vector<int>& nodes, const EdgeLoadSpec& spec) {
     if (caseIndex < 0 || caseIndex >= (int)m.cases.size()) return 0;
     const std::set<int> sel(nodes.begin(), nodes.end());
+    const bool axi = m.planeMode == PlaneMode::Axisymmetric;
     struct Edge {
-        int a, b;      // theo chiều ngược kim đồng hồ của phần tử
+        int a, b, mid = -1; // theo chiều ngược kim đồng hồ của phần tử; mid: nút giữa cạnh (bậc hai)
         double t;
         int count = 0;
     };
     std::map<std::pair<int, int>, Edge> edges;
     for (const auto& el : m.elements) {
         if (!el.isPlane()) continue;
-        const int nc = el.nodeCount();
+        const int nc = el.cornerCount();
+        const bool second = el.nodeCount() > nc;
         double area2 = 0;
         for (int k = 0; k < nc; ++k) {
             const Node& p = m.nodes[el.n[k]];
@@ -164,41 +186,72 @@ int applyEdgeLoad(Model& m, int caseIndex, const std::vector<int>& nodes, const 
             Edge& e = edges[key];
             e.a = a;
             e.b = b;
+            e.mid = second ? el.n[nc + k] : -1;
             e.t = el.t;
             e.count++;
         }
     }
     std::map<int, std::array<double, 2>> F;
     int used = 0;
+    // Gauss 3 điểm trên [0, 1]
+    const double gs[3] = {0.5 - 0.5 * std::sqrt(0.6), 0.5, 0.5 + 0.5 * std::sqrt(0.6)};
+    const double gw[3] = {5.0 / 18, 8.0 / 18, 5.0 / 18};
     for (const auto& [key, e] : edges) {
         if (e.count != 1 || !sel.count(e.a) || !sel.count(e.b)) continue; // chỉ cạnh biên
+        if (e.mid >= 0 && !sel.count(e.mid)) continue;
         const Node& A = m.nodes[e.a];
         const Node& B = m.nodes[e.b];
-        const double dx = B.x - A.x, dy = B.y - A.y, L = std::hypot(dx, dy);
-        if (L <= 0) continue;
+        if (std::hypot(B.x - A.x, B.y - A.y) <= 0) continue;
         ++used;
-        if (!spec.pressure) {
-            for (int n : {e.a, e.b}) {
-                F[n][0] += spec.qx * L / 2;
-                F[n][1] += spec.qy * L / 2;
+        const Node M = e.mid >= 0 ? m.nodes[e.mid] : Node{(A.x + B.x) / 2, (A.y + B.y) / 2};
+        const int ids[3] = {e.a, e.b, e.mid};
+        const int nn = e.mid >= 0 ? 3 : 2;
+        for (int g = 0; g < 3; ++g) {
+            const double s = gs[g];
+            // hàm dạng trên cạnh: tuyến tính (A, B) hoặc bậc hai (A, B, M)
+            double N[3], dN[3];
+            if (nn == 2) {
+                N[0] = 1 - s, N[1] = s, dN[0] = -1, dN[1] = 1;
+            } else {
+                N[0] = (1 - s) * (1 - 2 * s), N[1] = s * (2 * s - 1), N[2] = 4 * s * (1 - s);
+                dN[0] = 4 * s - 3, dN[1] = 4 * s - 1, dN[2] = 4 - 8 * s;
             }
-        } else {
-            // pháp tuyến ngoài của cạnh (phần tử ngược chiều kim đồng hồ): (dy, −dx)/L
-            const double nx = dy / L, ny = -dx / L;
-            double pa = spec.p0 + spec.ky * A.y, pb = spec.p0 + spec.ky * B.y;
-            if (spec.clipNegative) {
-                pa = std::max(pa, 0.0);
-                pb = std::max(pb, 0.0);
+            const double px[3] = {A.x, B.x, M.x}, py[3] = {A.y, B.y, M.y};
+            double x = 0, y = 0, tx = 0, ty = 0;
+            for (int k = 0; k < nn; ++k) {
+                x += N[k] * px[k];
+                y += N[k] * py[k];
+                tx += dN[k] * px[k];
+                ty += dN[k] * py[k];
             }
-            const double fa = L * (2 * pa + pb) / 6 * e.t, fb = L * (pa + 2 * pb) / 6 * e.t;
-            F[e.a][0] -= fa * nx;
-            F[e.a][1] -= fa * ny;
-            F[e.b][0] -= fb * nx;
-            F[e.b][1] -= fb * ny;
+            const double J = std::hypot(tx, ty);
+            if (J <= 0) continue;
+            const double w = gw[g] * J * (axi ? 2 * 3.14159265358979323846 * std::max(x, 0.0) : 1.0);
+            double fx, fy;
+            if (!spec.pressure) {
+                fx = spec.qx, fy = spec.qy;
+            } else if (!axi) {
+                double p = spec.p0 + spec.ky * y;
+                if (spec.clipNegative) p = std::max(p, 0.0);
+                fx = -p * e.t * ty / J, fy = p * e.t * tx / J;
+            } else {
+                // pháp tuyến ngoài (phần tử ngược chiều kim đồng hồ): (ty, −tx)/J; áp lực dương nén vào vật thể
+                double p = spec.p0 + spec.ky * y;
+                if (spec.clipNegative) p = std::max(p, 0.0);
+                fx = -p * ty / J, fy = p * tx / J;
+            }
+            for (int k = 0; k < nn; ++k) {
+                F[ids[k]][0] += N[k] * fx * w;
+                F[ids[k]][1] += N[k] * fy * w;
+            }
         }
     }
+    // bỏ phần dư do làm tròn (ví dụ nút trên trục đối xứng: lực đúng bằng 0)
+    double fmax = 0;
+    for (const auto& [n, f] : F) fmax = std::max({fmax, std::abs(f[0]), std::abs(f[1])});
     for (const auto& [n, f] : F)
-        if (f[0] != 0 || f[1] != 0) m.cases[caseIndex].nodal.push_back({n, {f[0], f[1], 0}});
+        if (std::abs(f[0]) > 1e-12 * fmax || std::abs(f[1]) > 1e-12 * fmax)
+            m.cases[caseIndex].nodal.push_back({n, {f[0], f[1], 0}});
     return used;
 }
 

@@ -22,7 +22,7 @@ struct SDL_Window;
 
 enum class ResultView { None, Deformed, N, Q, M, Sigma, Contour, Influence, Mode };
 enum class Pending { None, New, Open, OpenPath, Example, Quit };
-enum class ContourField { Ux, Uy, Umag, Sx, Sy, Txy, S1, S2, VonMises };
+enum class ContourField { Ux, Uy, Umag, Sx, Sy, Txy, S1, S2, VonMises, Sz };
 
 struct Camera {
     double cx = 5, cy = 2;   // tâm nhìn (m)

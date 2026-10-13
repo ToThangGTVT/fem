@@ -12,7 +12,7 @@ SECTION "I30" 0.00465 7.08e-05 0.3
 NODE 0 0
 NODE 6 0
 
-# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf [kG chỉ_nén] | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im
+# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf [kG chỉ_nén] | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im | TRI6 n1..n6 mat t | QUAD8 n1..n8 mat t
 FRAME 1 2 1 1 0 0 0
 
 # SUPPORT nút khóa_x khóa_y khóa_φ kx ky kφ

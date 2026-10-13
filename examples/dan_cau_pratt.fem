@@ -22,7 +22,7 @@ NODE 9 3
 NODE 12 3
 NODE 15 3
 
-# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf [kG chỉ_nén] | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im
+# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf [kG chỉ_nén] | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im | TRI6 n1..n6 mat t | QUAD8 n1..n8 mat t
 TRUSS 1 2 1 1
 TRUSS 2 3 1 1
 TRUSS 3 4 1 1

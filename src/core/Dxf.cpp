@@ -99,15 +99,16 @@ std::string exportDxf(const Model& m, const LoadSetResult* rs, const DxfExportOp
     // ---- sơ đồ
     for (size_t e = 0; e < m.elements.size(); ++e) {
         const Element& el = m.elements[e];
-        const int nc = el.nodeCount();
+        int ol[8];
+        const int nc = el.outline(ol);
         if (el.isBar()) {
             const Node& a = m.nodes[el.n[0]];
             const Node& b = m.nodes[el.n[1]];
             w.line(el.type == ElemType::Truss ? "FEM_DAN" : "FEM_THANH", a.x, a.y, b.x, b.y);
         } else {
             for (int k = 0; k < nc; ++k) {
-                const Node& a = m.nodes[el.n[k]];
-                const Node& b = m.nodes[el.n[(k + 1) % nc]];
+                const Node& a = m.nodes[el.n[ol[k]]];
+                const Node& b = m.nodes[el.n[ol[(k + 1) % nc]]];
                 w.line("FEM_PHANTU", a.x, a.y, b.x, b.y);
             }
         }
@@ -195,9 +196,10 @@ std::string exportDxf(const Model& m, const LoadSetResult* rs, const DxfExportOp
                     w.line("FEM_BIENDANG", X0, Y0, X1, Y1);
                 }
             } else if (el.isPlane()) {
-                const int nc = el.nodeCount();
+                int ol[8];
+                const int nc = el.outline(ol);
                 for (int k = 0; k < nc; ++k) {
-                    const int i = el.n[k], j = el.n[(k + 1) % nc];
+                    const int i = el.n[ol[k]], j = el.n[ol[(k + 1) % nc]];
                     w.line("FEM_BIENDANG", m.nodes[i].x + rs->U[3 * i] * S, m.nodes[i].y + rs->U[3 * i + 1] * S,
                            m.nodes[j].x + rs->U[3 * j] * S, m.nodes[j].y + rs->U[3 * j + 1] * S);
                 }

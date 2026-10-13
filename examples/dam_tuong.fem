@@ -334,7 +334,7 @@ NODE 5.5 3
 NODE 5.75 3
 NODE 6 3
 
-# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf [kG chỉ_nén] | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im
+# TRUSS n1 n2 mat sec | FRAME n1 n2 mat sec khớp_i khớp_j kf [kG chỉ_nén] | TRI3 n1 n2 n3 mat t | QUAD4 n1..n4 mat t im | TRI6 n1..n6 mat t | QUAD8 n1..n8 mat t
 QUAD4 1 2 27 26 1 0.2 1
 QUAD4 2 3 28 27 1 0.2 1
 QUAD4 3 4 29 28 1 0.2 1

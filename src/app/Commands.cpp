@@ -219,9 +219,10 @@ void drawGhost(App& a, ImDrawList* dl, const Xform& f) {
     };
     for (int e : a.selElems) {
         const Element& el = m.elements[e];
-        const int nc = el.nodeCount();
+        int ol[8];
+        const int nc = el.outline(ol);
         for (int k = 0; k < (el.isBar() ? 1 : nc); ++k)
-            dl->AddLine(P(el.n[k]), P(el.n[(k + 1) % nc]), a.pal.hover, 1.5f);
+            dl->AddLine(P(el.n[ol[k]]), P(el.n[ol[(k + 1) % nc]]), a.pal.hover, 1.5f);
     }
     for (int n : a.selNodes) dl->AddCircle(P(n), 4, a.pal.hover, 0, 1.5f);
 }

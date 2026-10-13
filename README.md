@@ -22,8 +22,8 @@ Giao diện kiểu AutoCAD (ribbon, dòng lệnh, thanh trạng thái), hai ch�
 | Ổn định: λcr, hệ số chiều dài tính toán μ | Dao động riêng: tần số, chu kỳ, dạng dao động |
 | ![Ứng suất σx dầm-tường](docs/images/dam_tuong_sigma_x.png) | ![Phổ phản ứng TCVN 9386](docs/images/pho_phan_ung.png) |
 | Dầm-tường (балка-стенка): phổ màu σx, phần tử Q4 | Phổ phản ứng TCVN 9386: phổ thiết kế, khối lượng hữu hiệu, nội lực SRSS |
-| ![Kiểm tra thiết kế BTCT](docs/images/kiem_tra_thiet_ke.png) | |
-| Kiểm tra thiết kế: cốt thép dầm, cột theo TCVN 5574:2018, tô màu trên sơ đồ | |
+| ![Kiểm tra thiết kế BTCT](docs/images/kiem_tra_thiet_ke.png) | ![Bể nước tròn, bài toán đối xứng trục](docs/images/be_nuoc_doi_xung_truc.png) |
+| Kiểm tra thiết kế: cốt thép dầm, cột theo TCVN 5574:2018, tô màu trên sơ đồ | Bể nước tròn đối xứng trục, phần tử Q8: ứng suất vòng σθ do áp lực nước |
 
 ## Biên dịch
 
@@ -49,7 +49,10 @@ Tùy chọn CMake: `-DFEM_BUILD_GUI=OFF` (chỉ lõi tính + test), `-DFEM_IMGUI
 - Thanh khung Euler–Bernoulli: khớp đầu thanh (giải phóng mômen bằng khử tĩnh), dầm trên nền đàn hồi Winkler
   (ma trận nền tương thích), tải nhiệt độ (t đều và chênh lệch Δt).
 - Tam giác biến dạng hằng (CST), tứ giác Q4 đẳng tham số có tùy chọn mode không tương thích QM6 (Wilson–Taylor).
-- Bài toán ứng suất phẳng / biến dạng phẳng.
+- Phần tử bậc hai: tam giác 6 nút T6 (LST, Gauss 6 điểm) và tứ giác 8 nút Q8 (serendipity, Gauss 3×3); cạnh cong
+  được vẽ đúng hình dạng, phổ màu nội suy bậc hai.
+- Bài toán ứng suất phẳng / biến dạng phẳng / **đối xứng trục** (vật thể tròn xoay: bể, ống dày, móng tròn; r = x, z = y,
+  ứng suất σr, σz, τrz, σθ; nút trên trục tự khóa ur; tải và phản lực tính cho cả vành 2πr).
 
 **Tải trọng**: tải nút (Fx, Fy, Mz); trên thanh: phân bố hình thang (theo trục cục bộ, tổng thể, hoặc trên hình chiếu),
 tập trung, mômen tập trung, nhiệt độ, sai số chế tạo ΔL; trọng lượng bản thân; chuyển vị cưỡng bức (lún gối); gối đàn hồi.
@@ -64,7 +67,7 @@ bất biến hình / biến hình / tức thời biến hình và hiển thị d
 Nhiều trường hợp tải và tổ hợp tải tuyến tính.
 
 **Kết quả**: chuyển vị, phản lực, biểu đồ N, Q, M, ứng suất pháp thớ biên N/A ± M/W, hình biến dạng (đường đàn hồi
-chính xác trong nhịp), phổ màu ux, uy, |u|, σx, σy, τxy, σ1, σ2, σ von Mises; xuất báo cáo `.txt`.
+chính xác trong nhịp), phổ màu ux, uy, |u|, σx, σy, τxy, σ1, σ2, σz (σθ khi đối xứng trục), σ von Mises; xuất báo cáo `.txt`.
 
 **Biểu đồ bao** N, Q, M qua các tổ hợp (ví dụ hoạt tải cách nhịp của dầm liên tục).
 
@@ -124,7 +127,7 @@ thanh tại điểm nối chữ T) và xuất sơ đồ, biểu đồ nội lự
 chuyển vị, nội lực; mở bằng trình duyệt và in ra PDF.
 
 **Tải trên cạnh phần tử phẳng**: lực phân bố qx, qy hoặc áp lực pháp tuyến biến đổi tuyến tính p = p0 + k·y
-(ví dụ áp lực thủy tĩnh), quy về lực nút tương đương.
+(ví dụ áp lực thủy tĩnh), quy về lực nút tương đương (tích phân Gauss trên cạnh, đúng cho cạnh bậc hai và đối xứng trục).
 
 **Giao diện kiểu AutoCAD** (sáng/tối): ribbon có biểu tượng, dòng lệnh, thanh trạng thái GRID/SNAP/ORTHO/OSNAP/DYN,
 con trỏ chữ thập, bắt điểm (nút, trung điểm, giao điểm, vuông góc, gần nhất — vẽ vào giữa thanh sẽ tự cắt thanh để nối),
@@ -185,6 +188,8 @@ LOADCASE "Tĩnh tải" 1                              # tên hệ_số_trọng_l
   ELOAD 2 DIST GY -15 -15 0                        # phần_tử DIST hướng q1 q2 theo_hình_chiếu
   NLOAD 2 10 0 0                                   # nút Fx Fy Mz
 COMBO "TT + 0,9Gió" 1 1.0 2 0.9
+PLANE AXISYM                                       # STRESS | STRAIN | AXISYM
+QUAD8 1 3 13 11 2 8 12 6 1 1                       # 4 nút góc, 4 nút giữa cạnh, vật_liệu, chiều_dày
 ```
 
 ## Cấu trúc mã nguồn
@@ -193,6 +198,7 @@ COMBO "TT + 0,9Gió" 1 1.0 2 0.9
 src/core/   lõi tính toán, không phụ thuộc giao diện
   Model         dữ liệu mô hình
   Elements      ma trận độ cứng, tải tương đương, nội lực phần tử
+  PlaneElements phần tử phẳng đẳng tham số T3, T6, Q4, Q8; ứng suất phẳng, biến dạng phẳng, đối xứng trục
   Skyline       ma trận skyline + phân tích LDLᵀ (COLSOL)
   Analysis      lắp ghép, đánh số lại RCM, điều kiện biên, giải, hậu xử lý, phát hiện hệ biến hình
   PostProcess   biểu đồ bao, đường ảnh hưởng
@@ -211,7 +217,7 @@ src/app/    giao diện SDL3 + ImGui (Ribbon: ribbon, dòng lệnh, chủ đề;
 tests/      kiểm chứng với lời giải giải tích
 ```
 
-Các ảnh trên được chụp tự động bằng chế độ dành cho phát triển: `fem2d --shot ảnh.bmp <số ví dụ> <chế độ xem> [đại lượng màu] [e | m<thanh>:<x>]` chụp màn hình rồi thoát;
+Các ảnh trên được chụp tự động bằng chế độ dành cho phát triển: `fem2d --shot ảnh.bmp <số ví dụ> <chế độ xem> [đại lượng màu] [e | s<bộ kết quả> | m<thanh>:<x>]` chụp màn hình rồi thoát;
 `fem2d --smoke` giả lập gõ lệnh và thao tác chuột như người dùng để kiểm tra giao diện.
 
 ## Tài liệu tham khảo

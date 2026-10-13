@@ -7,6 +7,7 @@
 #include "App.h"
 #include "core/Elements.h"
 #include "core/Mesher.h"
+#include "core/PlaneElements.h"
 
 using namespace fem;
 
@@ -89,14 +90,41 @@ ImU32 colormapU32(double t) {
     return IM_COL32((int)(c[0] * 255), (int)(c[1] * 255), (int)(c[2] * 255), 255);
 }
 
+// Đường biên phần tử phẳng trên màn hình: p[] là vị trí các nút; cạnh bậc hai được chia nhỏ để vẽ cong.
+int planeOutline(const Element& el, const ImVec2* p, ImVec2 out[24]) {
+    const int nn = el.nodeCount(), nc = el.cornerCount();
+    const int seg = nn > nc ? 6 : 1;
+    int n = 0;
+    for (int k = 0; k < nc; ++k) {
+        double x0, y0, x1, y1;
+        planeNodeNatural(el.type, k, x0, y0);
+        planeNodeNatural(el.type, (k + 1) % nc, x1, y1);
+        for (int s = 0; s < seg; ++s) {
+            if (seg == 1) {
+                out[n++] = p[k];
+                continue;
+            }
+            double N[8], a[8], b[8];
+            planeShape(el.type, x0 + (x1 - x0) * s / seg, y0 + (y1 - y0) * s / seg, N, a, b);
+            ImVec2 q(0, 0);
+            for (int i = 0; i < nn; ++i) q = q + p[i] * (float)N[i];
+            out[n++] = q;
+        }
+    }
+    return n;
+}
+
+bool g_axisym = false; // tên đại lượng theo bài toán đối xứng trục (r, z, θ)
+
 const char* fieldName(ContourField f) {
     switch (f) {
-    case ContourField::Ux: return "ux (mm)";
-    case ContourField::Uy: return "uy (mm)";
+    case ContourField::Ux: return g_axisym ? "ur (mm)" : "ux (mm)";
+    case ContourField::Uy: return g_axisym ? "uz (mm)" : "uy (mm)";
     case ContourField::Umag: return "|u| (mm)";
-    case ContourField::Sx: return "σx (MPa)";
-    case ContourField::Sy: return "σy (MPa)";
-    case ContourField::Txy: return "τxy (MPa)";
+    case ContourField::Sx: return g_axisym ? "σr (MPa)" : "σx (MPa)";
+    case ContourField::Sy: return g_axisym ? "σz (MPa)" : "σy (MPa)";
+    case ContourField::Txy: return g_axisym ? "τrz (MPa)" : "τxy (MPa)";
+    case ContourField::Sz: return g_axisym ? "σθ (MPa)" : "σz ngoài mặt phẳng (MPa)";
     case ContourField::S1: return "σ1 (MPa)";
     case ContourField::S2: return "σ2 (MPa)";
     case ContourField::VonMises: return "σ von Mises (MPa)";
@@ -112,6 +140,7 @@ double stressField(const std::array<double, 4>& s, ContourField f) {
     case ContourField::Sx: return si.sx * 1e-3;
     case ContourField::Sy: return si.sy * 1e-3;
     case ContourField::Txy: return si.txy * 1e-3;
+    case ContourField::Sz: return si.sz * 1e-3;
     case ContourField::S1: return si.s1 * 1e-3;
     case ContourField::S2: return si.s2 * 1e-3;
     case ContourField::VonMises: return si.vonMises * 1e-3;
@@ -132,7 +161,10 @@ struct Interaction {
 
 } // namespace
 
-const char* contourFieldName(ContourField f) { return fieldName(f); }
+const char* contourFieldName(ContourField f, bool axisym) {
+    g_axisym = axisym;
+    return fieldName(f);
+}
 
 void App::viewport() {
     P = pal;
@@ -252,35 +284,29 @@ void App::viewport() {
         if (!el.isPlane()) continue;
         const int nc = el.nodeCount();
         const bool def = contourOn ? contourOnDeformed : false;
-        ImVec2 pts[4];
+        ImVec2 pts[8], ol[24];
         for (int k = 0; k < nc; ++k) pts[k] = nodePos(el.n[k], def);
+        const int no = planeOutline(el, pts, ol);
         if (contourOn) {
-            double val[4];
+            double val[8];
             for (int k = 0; k < nc; ++k)
                 val[k] = isDispField(contour) ? dispField(*rs, el.n[k], contour)
                          : contourAveraged     ? stressField(rs->nodeStress[el.n[k]], contour)
                                                : stressField(rs->elemStress[e][k], contour);
-            const int n = 6;
+            const bool tri = isTriangle(el.type);
+            const int n = nc > el.cornerCount() ? 8 : 6;
             auto vtx = [&](double u, double v, ImVec2& p, ImU32& c) {
-                double w[4], val2 = 0;
-                if (nc == 4) {
-                    w[0] = (1 - u) * (1 - v);
-                    w[1] = u * (1 - v);
-                    w[2] = u * v;
-                    w[3] = (1 - u) * v;
-                } else {
-                    w[0] = 1 - u - v;
-                    w[1] = u;
-                    w[2] = v;
-                }
+                double N[8], a[8], b[8], val2 = 0;
+                if (tri) planeShape(el.type, u, v, N, a, b);
+                else planeShape(el.type, 2 * u - 1, 2 * v - 1, N, a, b);
                 p = ImVec2(0, 0);
                 for (int k = 0; k < nc; ++k) {
-                    p = p + pts[k] * (float)w[k];
-                    val2 += w[k] * val[k];
+                    p = p + pts[k] * (float)N[k];
+                    val2 += N[k] * val[k];
                 }
                 c = colormapU32((val2 - cmin) / (cmax - cmin));
             };
-            auto tri = [&](double u0, double v0, double u1, double v1, double u2, double v2) {
+            auto tri3 = [&](double u0, double v0, double u1, double v1, double u2, double v2) {
                 ImVec2 a, b, c;
                 ImU32 ca, cb, cc;
                 vtx(u0, v0, a, ca);
@@ -294,19 +320,28 @@ void App::viewport() {
             const double h = 1.0 / n;
             for (int i = 0; i < n; ++i)
                 for (int j = 0; j < n; ++j) {
-                    if (nc == 4) {
-                        tri(i * h, j * h, (i + 1) * h, j * h, (i + 1) * h, (j + 1) * h);
-                        tri(i * h, j * h, (i + 1) * h, (j + 1) * h, i * h, (j + 1) * h);
+                    if (!tri) {
+                        tri3(i * h, j * h, (i + 1) * h, j * h, (i + 1) * h, (j + 1) * h);
+                        tri3(i * h, j * h, (i + 1) * h, (j + 1) * h, i * h, (j + 1) * h);
                     } else if (i + j < n) {
-                        tri(i * h, j * h, (i + 1) * h, j * h, i * h, (j + 1) * h);
-                        if (i + j + 1 < n) tri((i + 1) * h, j * h, (i + 1) * h, (j + 1) * h, i * h, (j + 1) * h);
+                        tri3(i * h, j * h, (i + 1) * h, j * h, i * h, (j + 1) * h);
+                        if (i + j + 1 < n) tri3((i + 1) * h, j * h, (i + 1) * h, (j + 1) * h, i * h, (j + 1) * h);
                     }
                 }
-            dl->AddPolyline(pts, nc, withAlpha(P.planeEdge, 90), 1.0f, ImDrawFlags_Closed);
+            dl->AddPolyline(ol, no, withAlpha(P.planeEdge, 90), 1.0f, ImDrawFlags_Closed);
         } else {
-            dl->AddConvexPolyFilled(pts, nc, withAlpha(P.plane, drawDeformed ? 70 : 150));
-            dl->AddPolyline(pts, nc, withAlpha(P.planeEdge, drawDeformed ? 110 : 255), 1.0f, ImDrawFlags_Closed);
+            if (no == nc) dl->AddConvexPolyFilled(ol, no, withAlpha(P.plane, drawDeformed ? 70 : 150));
+            else dl->AddConcavePolyFilled(ol, no, withAlpha(P.plane, drawDeformed ? 70 : 150));
+            dl->AddPolyline(ol, no, withAlpha(P.planeEdge, drawDeformed ? 110 : 255), 1.0f, ImDrawFlags_Closed);
         }
+    }
+    // trục đối xứng (bài toán đối xứng trục: r = x, trục z ≡ x = 0)
+    if (m.planeMode == PlaneMode::Axisymmetric && m.hasPlane()) {
+        const ImVec2 a = cam.toScreen(0, 0);
+        const float y0 = cam.c0.y, y1 = cam.c1.y;
+        for (float y = y0; y < y1; y += 18) dl->AddLine(ImVec2(a.x, y), ImVec2(a.x, std::min(y + 10, y1)), withAlpha(P.textDim, 200), 1.2f);
+        for (float y = y0 + 13; y < y1; y += 18) dl->AddLine(ImVec2(a.x, y), ImVec2(a.x, std::min(y + 2, y1)), withAlpha(P.textDim, 200), 1.2f);
+        label(dl, ImVec2(a.x + 4, y0 + 6), "z (trục đối xứng)", P.textDim, ImVec2(0, 0), 0.8f);
     }
 
     // ---- thanh
@@ -376,9 +411,9 @@ void App::viewport() {
                 }
                 dl->AddPolyline(pts.data(), (int)pts.size(), P.deformed, 2.0f);
             } else if (!contourOn) {
-                ImVec2 pts[4];
+                ImVec2 pts[8], ol[24];
                 for (int k = 0; k < el.nodeCount(); ++k) pts[k] = nodePos(el.n[k], true);
-                dl->AddPolyline(pts, el.nodeCount(), P.deformed, 1.2f, ImDrawFlags_Closed);
+                dl->AddPolyline(ol, planeOutline(el, pts, ol), P.deformed, 1.2f, ImDrawFlags_Closed);
             }
         }
         // chuyển vị lớn nhất
@@ -660,9 +695,9 @@ void App::viewport() {
                     for (int n : eig.barChain[e]) pts.push_back(pos(n));
                     dl->AddPolyline(pts.data(), (int)pts.size(), P.deformed, 2.2f);
                 } else {
-                    ImVec2 pts[4];
+                    ImVec2 pts[8], ol[24];
                     for (int k = 0; k < el.nodeCount(); ++k) pts[k] = pos(el.n[k]);
-                    dl->AddPolyline(pts, el.nodeCount(), P.deformed, 1.2f, ImDrawFlags_Closed);
+                    dl->AddPolyline(ol, planeOutline(el, pts, ol), P.deformed, 1.2f, ImDrawFlags_Closed);
                 }
             }
             char b[200];
@@ -921,15 +956,16 @@ void App::viewport() {
     // phần tử được chọn / số hiệu
     for (size_t e = 0; e < m.elements.size(); ++e) {
         const Element& el = m.elements[e];
-        const int nc = el.nodeCount();
-        ImVec2 pts[4], cen(0, 0);
-        for (int k = 0; k < nc; ++k) {
-            pts[k] = nodePos(el.n[k], false);
-            cen = cen + pts[k] * (1.0f / nc);
-        }
+        const int nc = el.nodeCount(), ncc = el.cornerCount();
+        ImVec2 pts[8], cen(0, 0);
+        for (int k = 0; k < nc; ++k) pts[k] = nodePos(el.n[k], false);
+        for (int k = 0; k < ncc; ++k) cen = cen + pts[k] * (1.0f / ncc);
         if (selElems.count((int)e)) {
             if (el.isBar()) dl->AddLine(pts[0], pts[1], withAlpha(P.select, 200), 5.0f);
-            else dl->AddPolyline(pts, nc, P.select, 2.5f, ImDrawFlags_Closed);
+            else {
+                ImVec2 ol[24];
+                dl->AddPolyline(ol, planeOutline(el, pts, ol), P.select, 2.5f, ImDrawFlags_Closed);
+            }
         }
         if (showElemIds) {
             const std::string s = std::to_string(e + 1);
@@ -976,11 +1012,12 @@ void App::viewport() {
         for (size_t e = 0; e < m.elements.size(); ++e) {
             const Element& el = m.elements[e];
             if (!el.isPlane()) continue;
-            const int nc = el.nodeCount();
+            int olIdx[8];
+            const int nc = el.outline(olIdx);
             bool inside = false;
             for (int i = 0, j = nc - 1; i < nc; j = i++) {
-                const Node& a = m.nodes[el.n[i]];
-                const Node& b = m.nodes[el.n[j]];
+                const Node& a = m.nodes[el.n[olIdx[i]]];
+                const Node& b = m.nodes[el.n[olIdx[j]]];
                 if ((a.y > wy) != (b.y > wy) && wx < (b.x - a.x) * (wy - a.y) / (b.y - a.y) + a.x) inside = !inside;
             }
             if (inside) return (int)e;
@@ -1131,10 +1168,10 @@ void App::viewport() {
     if (hoverNode >= 0) dl->AddCircle(nodePos(hoverNode, false), 7, P.hover, 0, 2);
     else if (hoverElem >= 0) {
         const Element& el = m.elements[hoverElem];
-        ImVec2 pts[4];
+        ImVec2 pts[8], ol[24];
         for (int k = 0; k < el.nodeCount(); ++k) pts[k] = nodePos(el.n[k], false);
         if (el.isBar()) dl->AddLine(pts[0], pts[1], withAlpha(P.hover, 170), 4.5f);
-        else dl->AddPolyline(pts, el.nodeCount(), P.hover, 2.0f, ImDrawFlags_Closed);
+        else dl->AddPolyline(ol, planeOutline(el, pts, ol), P.hover, 2.0f, ImDrawFlags_Closed);
     }
 
     // ---- grip của đối tượng đang chọn (khi không có lệnh)
@@ -1179,10 +1216,11 @@ void App::viewport() {
             if (inside(nodePos((int)i, false))) put(selNodes, (int)i);
         for (size_t e = 0; e < m.elements.size(); ++e) {
             const Element& el = m.elements[e];
-            const int nc = el.nodeCount();
+            int olIdx[8];
+            const int nc = el.outline(olIdx);
             bool all = true, any = false;
             for (int k = 0; k < nc; ++k) {
-                const ImVec2 a = nodePos(el.n[k], false), b = nodePos(el.n[(k + 1) % nc], false);
+                const ImVec2 a = nodePos(el.n[olIdx[k]], false), b = nodePos(el.n[olIdx[(k + 1) % nc]], false);
                 all &= inside(a);
                 if (el.isBar() && k == 1) break;
                 any |= segHits(a, b);
@@ -1386,7 +1424,7 @@ void App::viewport() {
     if (contourOn) {
         const float bw = 18, bh = std::min(260.0f, sz.y - 60);
         const ImVec2 o(cam.c1.x - 120, cam.c0.y + 34);
-        label(dl, o + ImVec2(bw, -8), fieldName(contour), P.text, ImVec2(0.5f, 1), 0.9f);
+        label(dl, o + ImVec2(bw, -8), contourFieldName(contour, m.planeMode == PlaneMode::Axisymmetric), P.text, ImVec2(0.5f, 1), 0.9f);
         const int nb = 64;
         for (int i = 0; i < nb; ++i) {
             const float y0 = o.y + bh * i / nb, y1 = o.y + bh * (i + 1) / nb;
@@ -1477,8 +1515,12 @@ void App::viewport() {
                 for (int k = 0; k < el.nodeCount(); ++k) {
                     const auto& s = rs->elemStress[hoverElem][k];
                     const StressInfo si = stressInfo(s[0], s[1], s[2], s[3]);
-                    ImGui::Text("Nút %d: σx %.3f  σy %.3f  τxy %.3f  σvM %.3f MPa", el.n[k] + 1, si.sx * 1e-3,
-                                si.sy * 1e-3, si.txy * 1e-3, si.vonMises * 1e-3);
+                    if (m.planeMode == PlaneMode::Axisymmetric)
+                        ImGui::Text("Nút %d: σr %.3f  σz %.3f  τrz %.3f  σθ %.3f  σvM %.3f MPa", el.n[k] + 1, si.sx * 1e-3,
+                                    si.sy * 1e-3, si.txy * 1e-3, si.sz * 1e-3, si.vonMises * 1e-3);
+                    else
+                        ImGui::Text("Nút %d: σx %.3f  σy %.3f  τxy %.3f  σvM %.3f MPa", el.n[k] + 1, si.sx * 1e-3,
+                                    si.sy * 1e-3, si.txy * 1e-3, si.vonMises * 1e-3);
                 }
             }
             ImGui::EndTooltip();

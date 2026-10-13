@@ -14,7 +14,7 @@
 
 using namespace fem;
 
-const char* contourFieldName(ContourField f);
+const char* contourFieldName(ContourField f, bool axisym);
 
 namespace {
 
@@ -153,12 +153,16 @@ void App::modelPanel() {
             ImGui::SetNextItemWidth(-FLT_MIN);
             editS(*this, "##title", m.title);
             int pm = (int)m.planeMode;
-            const char* modes[] = {"Ứng suất phẳng (tấm mỏng)", "Biến dạng phẳng (đập, tường chắn)"};
+            const char* modes[] = {"Ứng suất phẳng (tấm mỏng)", "Biến dạng phẳng (đập, tường chắn)",
+                                   "Đối xứng trục (r = x, z = y)"};
             int out;
-            if (editEnum(*this, "Bài toán phẳng", pm, modes, 2, out)) {
+            if (editEnum(*this, "Bài toán phẳng", pm, modes, 3, out)) {
                 m.planeMode = (PlaneMode)out;
                 changed();
             }
+            if (m.planeMode == PlaneMode::Axisymmetric)
+                help("Vật thể tròn xoay quanh trục y (x = 0): x là bán kính r ≥ 0. Độ cứng, tải và phản lực tính cho cả "
+                     "vòng tròn (2π r); lực nút là tổng trên cả vòng. Chiều dày phần tử không dùng. Nút trên trục tự khóa ur.");
             ImGui::SeparatorText("Lưới vẽ");
             ImGui::SetNextItemWidth(100);
             ImGui::InputDouble("Bước lưới (m)", &gridStep, 0, 0, "%.3g");
@@ -1205,11 +1209,12 @@ void App::resultPanel() {
     if (view == ResultView::Contour) {
         const ContourField fields[] = {ContourField::Ux, ContourField::Uy, ContourField::Umag, ContourField::Sx,
                                        ContourField::Sy, ContourField::Txy, ContourField::S1, ContourField::S2,
-                                       ContourField::VonMises};
+                                       ContourField::Sz, ContourField::VonMises};
+        const bool axi = model.planeMode == PlaneMode::Axisymmetric;
         ImGui::SetNextItemWidth(170);
-        if (ImGui::BeginCombo("Đại lượng", contourFieldName(contour))) {
+        if (ImGui::BeginCombo("Đại lượng", contourFieldName(contour, axi))) {
             for (auto f : fields)
-                if (ImGui::Selectable(contourFieldName(f), f == contour)) contour = f;
+                if (ImGui::Selectable(contourFieldName(f, axi), f == contour)) contour = f;
             ImGui::EndCombo();
         }
         ImGui::Checkbox("Trung bình tại nút", &contourAveraged);
@@ -1390,7 +1395,7 @@ void App::resultPanel() {
     ImGui::Text("ux max = %.4f mm, uy max = %.4f mm", uxm * 1e3, uym * 1e3);
     if (m.hasBars()) ImGui::Text("|M|max = %.3f kNm   |Q|max = %.3f kN   |N|max = %.3f kN", Mmax, Qmax, Nmax);
     if (m.hasPlane()) {
-        double vm = 0, s1 = -DBL_MAX, s2 = DBL_MAX;
+        double vm = 0, s1 = -DBL_MAX, s2 = DBL_MAX, szMax = -DBL_MAX, szMin = DBL_MAX;
         for (size_t i = 0; i < m.nodes.size(); ++i) {
             if (rs->nodeStressCount[i] == 0) continue;
             const auto& s = rs->nodeStress[i];
@@ -1398,8 +1403,12 @@ void App::resultPanel() {
             vm = std::max(vm, si.vonMises);
             s1 = std::max(s1, si.s1);
             s2 = std::min(s2, si.s2);
+            szMax = std::max(szMax, si.sz);
+            szMin = std::min(szMin, si.sz);
         }
         ImGui::Text("σ1 max = %.3f MPa, σ2 min = %.3f MPa, σvM max = %.3f MPa", s1 * 1e-3, s2 * 1e-3, vm * 1e-3);
+        if (m.planeMode == PlaneMode::Axisymmetric)
+            ImGui::Text("σθ: max = %.3f MPa, min = %.3f MPa (ΣFx hướng kính do ứng suất vòng cân bằng)", szMax * 1e-3, szMin * 1e-3);
     }
     ImGui::Text("ΣF = (%.3f; %.3f) kN   ΣR = (%.3f; %.3f) kN", rs->sumFx, rs->sumFy, rs->sumRx, rs->sumRy);
     if (rs->foundRy != 0) ImGui::Text("Phản lực nền Winkler: %.3f kN", rs->foundRy);
@@ -1503,12 +1512,14 @@ void App::resultPanel() {
             ImGui::EndTabItem();
         }
         if (m.hasPlane() && ImGui::BeginTabItem("Ứng suất")) {
-            if (ImGui::BeginTable("S", 6, tableFlags())) {
+            const bool axi = m.planeMode == PlaneMode::Axisymmetric;
+            if (ImGui::BeginTable("S", 7, tableFlags())) {
                 ImGui::TableSetupScrollFreeze(0, 1);
                 ImGui::TableSetupColumn("Nút", ImGuiTableColumnFlags_WidthFixed, 40);
-                ImGui::TableSetupColumn("σx");
-                ImGui::TableSetupColumn("σy");
-                ImGui::TableSetupColumn("τxy");
+                ImGui::TableSetupColumn(axi ? "σr" : "σx");
+                ImGui::TableSetupColumn(axi ? "σz" : "σy");
+                ImGui::TableSetupColumn(axi ? "τrz" : "τxy");
+                ImGui::TableSetupColumn(axi ? "σθ" : "σz");
                 ImGui::TableSetupColumn("σ1 / σ2");
                 ImGui::TableSetupColumn("σvM (MPa)");
                 ImGui::TableHeadersRow();
@@ -1528,6 +1539,8 @@ void App::resultPanel() {
                         ImGui::Text("%.3f", si.sy * 1e-3);
                         ImGui::TableNextColumn();
                         ImGui::Text("%.3f", si.txy * 1e-3);
+                        ImGui::TableNextColumn();
+                        ImGui::Text("%.3f", si.sz * 1e-3);
                         ImGui::TableNextColumn();
                         ImGui::Text("%.3f / %.3f", si.s1 * 1e-3, si.s2 * 1e-3);
                         ImGui::TableNextColumn();
@@ -1582,8 +1595,8 @@ void App::meshDialog() {
     ImGui::InputInt("Số ô theo Y", &ny);
     nx = std::clamp(nx, 1, 400);
     ny = std::clamp(ny, 1, 400);
-    const char* types[] = {"Tứ giác Q4", "Tam giác CST"};
-    ImGui::Combo("Loại phần tử", &type, types, 2);
+    const char* types[] = {"Tứ giác Q4", "Tam giác CST (T3)", "Tứ giác bậc hai Q8 (serendipity)", "Tam giác bậc hai T6 (LST)"};
+    ImGui::Combo("Loại phần tử", &type, types, 4);
     if (type == 0) ImGui::Checkbox("Mode không tương thích (QM6)", &inc);
     ImGui::InputDouble("Chiều dày t (m)", &t);
     const auto mats = matNames(model);
@@ -1600,8 +1613,8 @@ void App::meshDialog() {
     if (ImGui::Button("Tạo lưới", ImVec2(-FLT_MIN, 0)) && W > 0 && H > 0 && t > 0) {
         snapshot();
         if (model.materials.empty()) model.materials.push_back(toMaterial(materialPresets()[5]));
-        std::vector<int> g = meshRectangle(model, x0, y0, W, H, nx, ny, type == 0 ? ElemType::Quad4 : ElemType::Tri3,
-                                           curMat, t, inc);
+        const ElemType et[] = {ElemType::Quad4, ElemType::Tri3, ElemType::Quad8, ElemType::Tri6};
+        std::vector<int> g = meshRectangle(model, x0, y0, W, H, nx, ny, et[std::clamp(type, 0, 3)], curMat, t, inc);
         if (fixBottom)
             for (int i = 0; i <= nx; ++i) model.supportFor(g[i]).fix = {true, true, false};
         else if (pinCorners) {
@@ -1609,11 +1622,15 @@ void App::meshDialog() {
             model.supportFor(g[nx]).fix = {false, true, false};
         }
         if (q != 0) {
-            LoadCase& lc = model.cases[activeCase];
-            for (int i = 0; i <= nx; ++i) {
-                const double w = (i == 0 || i == nx) ? 0.5 : 1.0;
-                lc.nodal.push_back({g[ny * (nx + 1) + i], {0, q * w * W / nx, 0}});
-            }
+            // tải mép trên quy về lực nút tương đương (đúng cho cả phần tử bậc hai)
+            std::vector<int> top;
+            const double tol = 1e-9 * std::max({1.0, std::abs(y0 + H), W});
+            for (size_t i = 0; i < model.nodes.size(); ++i)
+                if (std::abs(model.nodes[i].y - (y0 + H)) <= tol && model.nodes[i].x >= x0 - tol && model.nodes[i].x <= x0 + W + tol)
+                    top.push_back((int)i);
+            EdgeLoadSpec es;
+            es.qy = q;
+            applyEdgeLoad(model, activeCase, top, es);
         }
         view = ResultView::Contour;
         fitRequested = true;

@@ -339,6 +339,38 @@ Model settlementFrame() {
     return m;
 }
 
+Model roundTank() {
+    Model m;
+    m.title = "Bể nước tròn D = 10 m, đáy liền khối (đối xứng trục, Q8)";
+    m.planeMode = PlaneMode::Axisymmetric;
+    m.materials.push_back(toMaterial(preset("Bê tông B25")));
+    // r = x, z = y; đáy dày 0,4 m, thành dày 0,3 m cao 4 m
+    const double R = 5, tw = 0.3, hb = 0.4, Hw = 4;
+    std::vector<int> a = meshRectangle(m, 0, 0, R - tw, hb, 12, 2, ElemType::Quad8, 0, 1);
+    std::vector<int> b = meshRectangle(m, R - tw, 0, tw, hb, 2, 2, ElemType::Quad8, 0, 1);
+    meshRectangle(m, R - tw, hb, tw, Hw, 2, 16, ElemType::Quad8, 0, 1);
+    // đáy tựa trên nền cứng: khóa uz các nút mặt dưới
+    for (size_t i = 0; i < m.nodes.size(); ++i)
+        if (std::abs(m.nodes[i].y) < 1e-9) support(m, (int)i, false, true, false);
+    LoadCase tl{"Trọng lượng bản thân", 1.0};
+    LoadCase water{"Áp lực nước (đầy bể)"};
+    m.cases = {tl, water};
+    // áp lực thủy tĩnh p = γ(hb + Hw − z) lên mặt trong thành và mặt trên đáy
+    std::vector<int> wet;
+    for (size_t i = 0; i < m.nodes.size(); ++i) {
+        const Node& n = m.nodes[i];
+        if ((std::abs(n.x - (R - tw)) < 1e-9 && n.y >= hb - 1e-9) || (std::abs(n.y - hb) < 1e-9 && n.x <= R - tw + 1e-9))
+            wet.push_back((int)i);
+    }
+    EdgeLoadSpec es;
+    es.pressure = true;
+    es.p0 = 10 * (hb + Hw);
+    es.ky = -10;
+    applyEdgeLoad(m, 1, wet, es);
+    m.combos.push_back({"TLBT + Nước", {{0, 1.0}, {1, 1.0}}});
+    return m;
+}
+
 } // namespace
 
 const std::vector<Example>& examples() {
@@ -354,6 +386,7 @@ const std::vector<Example>& examples() {
         {"Dầm trên nền đàn hồi", "Mô hình nền Winkler", winklerBeam},
         {"Dầm-tường (ứng suất phẳng)", "Lưới Q4 24×12", deepBeam},
         {"Đập trọng lực (biến dạng phẳng)", "Lưới tam giác CST", gravityDam},
+        {"Bể nước tròn (đối xứng trục)", "Phần tử Q8, áp lực thủy tĩnh", roundTank},
     };
     return v;
 }

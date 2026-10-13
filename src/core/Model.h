@@ -9,8 +9,8 @@
 
 namespace fem {
 
-enum class ElemType { Truss, Frame, Tri3, Quad4 };
-enum class PlaneMode { Stress, Strain };   // ứng suất phẳng / biến dạng phẳng
+enum class ElemType { Truss, Frame, Tri3, Quad4, Tri6, Quad8 };
+enum class PlaneMode { Stress, Strain, Axisymmetric }; // ứng suất phẳng / biến dạng phẳng / đối xứng trục (x = r, y = z)
 
 enum Dof { UX = 0, UY = 1, RZ = 2 };
 
@@ -54,7 +54,8 @@ struct Section {
 
 struct Element {
     ElemType type = ElemType::Frame;
-    std::array<int, 4> n{-1, -1, -1, -1};
+    // nút: các góc theo chiều ngược kim đồng hồ, sau đó các nút giữa cạnh (T6: 1-2, 2-3, 3-1; Q8: 1-2, 2-3, 3-4, 4-1)
+    std::array<int, 8> n{-1, -1, -1, -1, -1, -1, -1, -1};
     int mat = 0;
     int sec = 0;              // thanh: chỉ số tiết diện
     double t = 0.1;           // phần tử phẳng: chiều dày, m
@@ -71,8 +72,26 @@ struct Element {
         case ElemType::Frame: return 2;
         case ElemType::Tri3: return 3;
         case ElemType::Quad4: return 4;
+        case ElemType::Tri6: return 6;
+        case ElemType::Quad8: return 8;
         }
         return 0;
+    }
+    int cornerCount() const { return type == ElemType::Tri3 || type == ElemType::Tri6 ? 3 : type == ElemType::Quad4 || type == ElemType::Quad8 ? 4 : 2; }
+    // Thứ tự nút đi quanh biên (góc – giữa cạnh – góc ...); trả về số nút
+    int outline(int out[8]) const {
+        static const int t3[] = {0, 1, 2}, q4[] = {0, 1, 2, 3}, t6[] = {0, 3, 1, 4, 2, 5}, q8[] = {0, 4, 1, 5, 2, 6, 3, 7};
+        const int* src = t3;
+        int n = 0;
+        switch (type) {
+        case ElemType::Tri3: src = t3, n = 3; break;
+        case ElemType::Quad4: src = q4, n = 4; break;
+        case ElemType::Tri6: src = t6, n = 6; break;
+        case ElemType::Quad8: src = q8, n = 8; break;
+        default: out[0] = 0, out[1] = 1; return 2;
+        }
+        for (int i = 0; i < n; ++i) out[i] = src[i];
+        return n;
     }
     bool isBar() const { return type == ElemType::Truss || type == ElemType::Frame; }
     bool isPlane() const { return !isBar(); }
@@ -149,7 +168,7 @@ struct Model {
     void clear();
     int findNode(double x, double y, double tol) const;
     int addNode(double x, double y, double tol = 1e-9); // gộp nút trùng
-    int findElement(ElemType type, const std::array<int, 4>& n) const;
+    int findElement(ElemType type, const std::array<int, 8>& n) const;
     Support* supportAt(int node);
     const Support* supportAt(int node) const;
     Support& supportFor(int node);

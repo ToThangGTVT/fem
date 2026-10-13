@@ -30,6 +30,7 @@ add_library(femcore STATIC
   src/core/Design.cpp
   src/core/Dxf.cpp
   src/core/Report.cpp
+  src/core/PlaneElements.cpp
 )
 target_include_directories(femcore PUBLIC src)
 if(MSVC)

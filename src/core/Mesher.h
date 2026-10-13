@@ -4,7 +4,7 @@
 
 namespace fem {
 
-// Lưới tứ giác ánh xạ song tuyến từ 4 góc (ngược chiều kim đồng hồ). type = Quad4 hoặc Tri3.
+// Lưới tứ giác ánh xạ song tuyến từ 4 góc (ngược chiều kim đồng hồ). type = Quad4, Tri3, Quad8 hoặc Tri6.
 // Trả về danh sách chỉ số nút trên lưới (ny+1)×(nx+1), theo hàng từ dưới lên.
 std::vector<int> meshPatch(Model& m, const double cx[4], const double cy[4], int nx, int ny, ElemType type, int mat,
                            double t, bool incompatible = true);
@@ -32,11 +32,12 @@ int mergeNodes(Model& m, double tol);
 // Tải phân bố trên cạnh biên của phần tử phẳng, quy về lực nút tương đương.
 struct EdgeLoadSpec {
     bool pressure = false;  // false: lực qx, qy (kN/m chiều dài cạnh); true: áp lực pháp tuyến
-    double qx = 0, qy = 0;  // kN/m
+    double qx = 0, qy = 0;  // kN/m (đối xứng trục: kN/m² trên mặt tròn xoay)
     double p0 = 0, ky = 0;  // áp lực p(y) = p0 + ky·y (kN/m²), dương: nén vào vật thể; nhân chiều dày phần tử
     bool clipNegative = true; // bỏ phần p < 0 (ví dụ phía trên mực nước)
 };
-// Áp dụng cho các cạnh biên có cả hai nút nằm trong 'nodes'. Trả về số cạnh đã đặt tải.
+// Áp dụng cho các cạnh biên có mọi nút nằm trong 'nodes'. Bài toán đối xứng trục: tải tính cho cả vành (2π r),
+// không nhân chiều dày. Trả về số cạnh đã đặt tải.
 int applyEdgeLoad(Model& m, int caseIndex, const std::vector<int>& nodes, const EdgeLoadSpec& spec);
 
 } // namespace fem

@@ -23,12 +23,12 @@ int Model::addNode(double x, double y, double tol) {
     return (int)nodes.size() - 1;
 }
 
-int Model::findElement(ElemType type, const std::array<int, 4>& n) const {
+int Model::findElement(ElemType type, const std::array<int, 8>& n) const {
     for (size_t i = 0; i < elements.size(); ++i) {
         const Element& e = elements[i];
         if (e.type != type) continue;
         int nc = e.nodeCount();
-        std::array<int, 4> a = e.n, b = n;
+        std::array<int, 8> a = e.n, b = n;
         std::sort(a.begin(), a.begin() + nc);
         std::sort(b.begin(), b.begin() + nc);
         if (std::equal(a.begin(), a.begin() + nc, b.begin())) return (int)i;
@@ -255,6 +255,8 @@ const char* elemTypeName(ElemType t) {
     case ElemType::Frame: return "Thanh khung";
     case ElemType::Tri3: return "Tam giác CST";
     case ElemType::Quad4: return "Tứ giác Q4";
+    case ElemType::Tri6: return "Tam giác T6";
+    case ElemType::Quad8: return "Tứ giác Q8";
     }
     return "?";
 }
