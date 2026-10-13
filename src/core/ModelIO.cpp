@@ -79,10 +79,13 @@ std::string modelToText(const Model& m) {
     o << "PLANE " << (m.planeMode == PlaneMode::Stress ? "STRESS" : "STRAIN") << "\n";
     if (m.secondOrder) o << "ANALYSIS PDELTA 1\n";
     o << "\n";
-    o << "# MATERIAL tên E nu alpha gamma\n";
-    for (const auto& x : m.materials)
+    o << "# MATERIAL tên E nu alpha gamma [loại(1 thép, 2 bê tông) f/Rb Rbt (MPa)]\n";
+    for (const auto& x : m.materials) {
         o << "MATERIAL " << quote(x.name) << " " << num(x.E) << " " << num(x.nu) << " " << num(x.alpha) << " "
-          << num(x.gamma) << "\n";
+          << num(x.gamma);
+        if (x.kind != 0 || x.fd != 0) o << " " << x.kind << " " << num(x.fd) << " " << num(x.ft);
+        o << "\n";
+    }
     o << "# SECTION tên A I h [y_trên y_dưới] [SHAPE loại p1..p6 | POLY n x1 y1 ... (mỗi chu tuyến)]\n";
     for (const auto& x : m.sections) {
         o << "SECTION " << quote(x.name) << " " << num(x.A) << " " << num(x.I) << " " << num(x.h);
@@ -190,6 +193,9 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
             x.nu = d(3);
             x.alpha = d(4, 1.2e-5);
             x.gamma = d(5, 78.5);
+            x.kind = (int)d(6, 0);
+            x.fd = d(7, 0);
+            x.ft = d(8, 0);
             m.materials.push_back(x);
         } else if (k == "SECTION") {
             if (!need(4)) return fail("SECTION thiếu tham số");

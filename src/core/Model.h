@@ -24,6 +24,9 @@ struct Material {
     double nu = 0.3;       // hệ số Poisson
     double alpha = 1.2e-5; // hệ số giãn nở nhiệt, 1/°C
     double gamma = 78.5;   // trọng lượng riêng, kN/m³
+    int kind = 0;          // 0: khác, 1: thép, 2: bê tông (dùng khi kiểm tra thiết kế)
+    double fd = 0;         // cường độ tính toán, MPa: thép f (TCVN 5575); bê tông Rb (TCVN 5574)
+    double ft = 0;         // bê tông: cường độ chịu kéo tính toán Rbt, MPa
 };
 
 // Hình dạng tiết diện (để tính đặc trưng hình học, ứng suất tiếp, vẽ). Kích thước theo m.

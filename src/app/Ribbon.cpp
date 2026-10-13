@@ -750,6 +750,7 @@ void App::ribbon() {
         beginColumn();
         if (smallButton("Tạo dàn", Icon::TrussGen, "Tạo dàn Pratt/Howe/Warren/tam giác (TAODAN)")) showTrussGen = true;
         if (smallButton("Tạo vòm", Icon::Influence, "Vòm parabol/tròn, 2 khớp/3 khớp/ngàm (VOM)")) showArchGen = true;
+        if (smallButton("Cọc ngang", Icon::Fix, "Cọc chịu tải ngang theo phương pháp m (COC)")) showPileGen = true;
         endColumn();
         endPanel("Vẽ");
 
@@ -994,6 +995,9 @@ void App::ribbon() {
             ImGui::SameLine(0, 6);
         }
         endPanel("Tỉ lệ");
+        beginPanel();
+        if (bigButton("Kiểm tra\nthiết kế", Icon::Report, "Thép TCVN 5575, BTCT TCVN 5574, độ võng (lệnh KTTK)")) startCommand("KTTK");
+        endPanel("Thiết kế");
         beginPanel();
         if (bigButton("Ứng suất\ntiết diện", Icon::Sigma, "σ, τ trên tiết diện, vòng Mohr, thuyết bền (lệnh USTD)")) startCommand("USTD");
         endPanel("Tiết diện");
@@ -1292,6 +1296,15 @@ void App::startCommand(const std::string& raw) {
     if (is({"USTD", "SECSTRESS"})) {
         showSectionStress = true;
         if (view == ResultView::None) view = ResultView::M;
+        return;
+    }
+    if (is({"KTTK", "DESIGN"})) {
+        showDesign = true;
+        if (needAnalyze) analyzeNow(true);
+        return;
+    }
+    if (is({"COC", "PILE"})) {
+        showPileGen = true;
         return;
     }
     if (is({"DONGLUC", "DYNAMICS", "PHOPU"})) {

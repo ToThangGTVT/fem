@@ -27,6 +27,7 @@ add_library(femcore STATIC
   src/core/SectionGeom.cpp
   src/core/ForceMethod.cpp
   src/core/Dynamics.cpp
+  src/core/Design.cpp
 )
 target_include_directories(femcore PUBLIC src)
 if(MSVC)
@@ -95,6 +96,7 @@ if(FEM_BUILD_GUI)
     src/app/SectionUI.cpp
     src/app/Textbook.cpp
     src/app/DynamicsUI.cpp
+    src/app/DesignUI.cpp
   )
   target_link_libraries(fem2d PRIVATE femcore imgui)
   if(MSVC)

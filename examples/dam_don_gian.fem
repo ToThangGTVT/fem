@@ -3,8 +3,8 @@ FEM2D 1
 TITLE "Dầm đơn giản nhịp 6 m, q = 10 kN/m (Mmax = qL²/8 = 45 kNm)"
 PLANE STRESS
 
-# MATERIAL tên E nu alpha gamma
-MATERIAL "Thép CCT34" 210000000 0.3 1.2e-05 78.5
+# MATERIAL tên E nu alpha gamma [loại(1 thép, 2 bê tông) f/Rb Rbt (MPa)]
+MATERIAL "Thép CCT34" 210000000 0.3 1.2e-05 78.5 1 210 0
 # SECTION tên A I h [y_trên y_dưới] [SHAPE loại p1..p6 | POLY n x1 y1 ... (mỗi chu tuyến)]
 SECTION "I30" 0.00465 7.08e-05 0.3
 

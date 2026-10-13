@@ -3,8 +3,8 @@ FEM2D 1
 TITLE "Dàn cầu 6 khoang, nhịp 18 m, cao 3 m"
 PLANE STRESS
 
-# MATERIAL tên E nu alpha gamma
-MATERIAL "Thép CCT38" 210000000 0.3 1.2e-05 78.5
+# MATERIAL tên E nu alpha gamma [loại(1 thép, 2 bê tông) f/Rb Rbt (MPa)]
+MATERIAL "Thép CCT38" 210000000 0.3 1.2e-05 78.5 1 230 0
 # SECTION tên A I h [y_trên y_dưới] [SHAPE loại p1..p6 | POLY n x1 y1 ... (mỗi chu tuyến)]
 SECTION "2L75x6" 0.001756 0 0.075
 

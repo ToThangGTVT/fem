@@ -22,6 +22,8 @@ Giao diện kiểu AutoCAD (ribbon, dòng lệnh, thanh trạng thái), hai ch�
 | Ổn định: λcr, hệ số chiều dài tính toán μ | Dao động riêng: tần số, chu kỳ, dạng dao động |
 | ![Ứng suất σx dầm-tường](docs/images/dam_tuong_sigma_x.png) | ![Phổ phản ứng TCVN 9386](docs/images/pho_phan_ung.png) |
 | Dầm-tường (балка-стенка): phổ màu σx, phần tử Q4 | Phổ phản ứng TCVN 9386: phổ thiết kế, khối lượng hữu hiệu, nội lực SRSS |
+| ![Kiểm tra thiết kế BTCT](docs/images/kiem_tra_thiet_ke.png) | |
+| Kiểm tra thiết kế: cốt thép dầm, cột theo TCVN 5574:2018, tô màu trên sơ đồ | |
 
 ## Biên dịch
 
@@ -103,6 +105,17 @@ có lỗ → A, trọng tâm, Jx, Jy, Jxy, mômen quán tính chính và góc tr
   điều hòa, gia tốc nền dạng sin hoặc nhập bảng (t, a); đồ thị u(t), nội lực tại từng thời điểm, hoạt họa.
 - Khối lượng từ trọng lượng bản thân và/hoặc quy từ tải trọng thẳng đứng của một bộ tải.
 
+**Kiểm tra thiết kế sơ bộ** (lệnh `KTTK`), tự nhóm các phần tử thẳng hàng thành cấu kiện:
+- **Thép TCVN 5575:2012**: bền N/A ± M/W, ổn định với hệ số φ theo độ mảnh quy ước λ̄ (μ mặc định hoặc lấy từ
+  phân tích ổn định), cắt τ = VS/(It), độ mảnh giới hạn.
+- **Bê tông cốt thép TCVN 5574:2018**: cốt thép dọc dầm (αm, ξR, cốt chịu nén khi αm > αR), cốt đai (c = 2h0),
+  cột chữ nhật nén lệch tâm đặt thép đối xứng có kể uốn dọc η.
+- **Độ võng** so với dây cung, giới hạn L/n.
+- Hệ số sử dụng tô màu trực tiếp trên sơ đồ.
+- Vật liệu có cường độ tính toán (thép f; bê tông Rb, Rbt) theo TCVN.
+
+**Cọc chịu tải ngang theo phương pháp "m"** (lệnh `COC`): hệ số nền tăng tuyến tính theo độ sâu, bề rộng quy ước bp.
+
 **Tải trên cạnh phần tử phẳng**: lực phân bố qx, qy hoặc áp lực pháp tuyến biến đổi tuyến tính p = p0 + k·y
 (ví dụ áp lực thủy tĩnh), quy về lực nút tương đương.
 
@@ -132,6 +145,7 @@ Gõ lệnh ở bất cứ đâu, không cần nhấp vào dòng lệnh. **Enter 
 | `NGAM`, `KHOP`, `DIDONG`, `DIDONGX`, `NGAMTRUOT`, `BOGOI` | gối tựa |
 | `TAINUT`, `TAIPB`, `TAITT`, `MOMEN` | tải nút, tải phân bố, lực tập trung, mômen |
 | `TINH` (F5), `PDELTA`, `CTHH` | tính tĩnh, bật/tắt P-Δ, cấu tạo hình học |
+| `KTTK`, `COC` | kiểm tra thiết kế, tạo cọc chịu tải ngang |
 | `ONDINH`, `DAODONG`, `DONGLUC` | ổn định, dao động riêng, động lực học |
 | `TIETDIEN`, `USTD` | thiết kế tiết diện, ứng suất trên tiết diện |
 | `PPL`, `PPCV`, `VOM`, `VUT` | phương pháp lực, phương pháp chuyển vị ma trận, tạo vòm, thanh vút |
@@ -179,6 +193,7 @@ src/core/   lõi tính toán, không phụ thuộc giao diện
   SectionGeom   đặc trưng hình học tiết diện, lõi tiết diện, mômen tĩnh và bề rộng tại cao độ
   ForceMethod   phương pháp lực, Maxwell–Mohr, phương pháp chuyển vị dạng ma trận
   Dynamics      phổ phản ứng TCVN 9386, dao động cưỡng bức, Newmark
+  Design        cấu kiện, kiểm tra thép, BTCT, độ võng, cọc phương pháp m
   Mesher        tạo lưới, chia thanh
   Library       vật liệu, thép hình
   ModelIO       đọc/ghi .fem, báo cáo

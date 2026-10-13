@@ -5,6 +5,7 @@
 #include <string>
 
 #include "core/Analysis.h"
+#include "core/Design.h"
 #include "core/Dynamics.h"
 #include "core/Eigen.h"
 #include "core/Examples.h"
@@ -1238,7 +1239,100 @@ static void testDynamics() {
     }
 }
 
+static void testDesign() {
+    std::puts("Kiểm tra thiết kế: cấu kiện, thép TCVN 5575, BTCT TCVN 5574, độ võng, cọc");
+    auto ex = [](const char* name) {
+        for (const auto& e : examples())
+            if (std::string(e.name) == name) return e.build();
+        return Model{};
+    };
+    check(findMembers(ex("Khung 1 tầng 1 nhịp")).size() == 3, "khung cổng: 3 cấu kiện", 0, 0);
+    check(findMembers(ex("Dầm liên tục 3 nhịp")).size() == 3, "dầm liên tục: 3 nhịp", 0, 0);
+    check(findMembers(ex("Khung 2 tầng 2 nhịp")).size() == 10, "khung 2 tầng 2 nhịp: 10 cấu kiện", 0, 0);
+    {
+        Model m = beamModel(6, 4, 3e7, 0.18, 0.0054);
+        const auto mb = findMembers(m);
+        check(mb.size() == 1 && std::abs(mb[0].L - 6) < 1e-12, "4 phần tử thẳng hàng không gối giữa → 1 cấu kiện", (double)mb.size(), 1);
+    }
+    {
+        const double fE = 230.0 / 2.1e5;
+        auto p1 = [&](double lb) { return 1 - (0.073 - 5.53 * fE) * lb * std::sqrt(lb); };
+        near("φ(λ̄ = 2)", steelPhi(2.0, fE), p1(2.0), 1e-12);
+        check(std::abs(steelPhi(2.5 - 1e-9, fE) - steelPhi(2.5 + 1e-9, fE)) < 0.01, "φ liên tục tại λ̄ = 2,5", 0, 0);
+        check(std::abs(steelPhi(4.5 - 1e-9, fE) - steelPhi(4.5 + 1e-9, fE)) < 0.01, "φ liên tục tại λ̄ = 4,5", 0, 0);
+        check(steelPhi(1, fE) > steelPhi(3, fE) && steelPhi(3, fE) > steelPhi(6, fE), "φ giảm khi λ̄ tăng", 0, 0);
+    }
+    {
+        // cột thép I20 hai đầu khớp, nén đúng tâm 300 kN, CCT38
+        Model m = columnModel(4, 2.1e8, 26.8e-4, 1840e-8);
+        m.materials[0] = toMaterial(materialPresets()[1]);
+        m.cases[0].nodal[0].F = {0, -300, 0};
+        fix(m, 0, true, true, false);
+        fix(m, 1, true, false, false);
+        const auto r = analyze(m);
+        const auto mb = findMembers(m);
+        SteelParams sp;
+        const auto c = checkSteel(m, r, {0}, mb, sp);
+        check(c.size() == 1, "kiểm tra 1 cấu kiện thép", 0, 0);
+        if (c.size() == 1) {
+            const double f = 230e3, i = std::sqrt(1840e-8 / 26.8e-4), lb = 4 / i * std::sqrt(f / 2.1e8);
+            const double phi = steelPhi(lb, f / 2.1e8);
+            near("hệ số sử dụng ổn định = N/(φ·A·f)", c[0].stability, 300 / (phi * 26.8e-4 * f), 1e-9);
+            near("độ mảnh λ = l0/i", c[0].lambda, 4 / i, 1e-12);
+        }
+    }
+    {
+        // dầm BTCT 25×50, B20, CB400: M = 120 kNm
+        const Material c = toMaterial(materialPresets()[4]);
+        RcParams p;
+        const auto d = rcBeamFlexure(120, 0.25, 0.5, c, p);
+        const double h0 = 0.46, am = 120 / (11.5e3 * 0.25 * h0 * h0), xi = 1 - std::sqrt(1 - 2 * am);
+        near("dầm: αm", d.alphaM, am, 1e-12);
+        near("dầm: As = Rb·b·ξ·h0/Rs", d.As, 11.5e3 * 0.25 * xi * h0 / 350e3 * 1e4, 1e-9);
+        near("ξR = 0,8/(1 + Rs/700)", rcXiR(350, 2e5), 0.8 / (1 + 350.0 / 700.0), 1e-12);
+        const auto big = rcBeamFlexure(400, 0.25, 0.5, c, p);
+        check(big.overReinforced && big.AsComp > 0, "M lớn: cần cốt chịu nén", big.AsComp, 0);
+        // cột 30×40, N = 1200 kN, M = 150 kNm, l0 = 3,6 m: kiểm tra lại hai phương trình cân bằng
+        const auto col = rcColumnSym(1200, 150, 0.3, 0.4, 3.6, c, p);
+        check(col.As > 0 && col.eta >= 1, "cột: As > 0, η ≥ 1", col.As, 0);
+        const double Rb = 11.5e3, Rs = 350e3, b = 0.3, hc0 = 0.36, a = 0.04, xiR = rcXiR(350, 2e5);
+        const double e = col.eta * col.e0 + (hc0 - a) / 2, As = col.As * 1e-4, x = col.x;
+        const double sigma = x / hc0 <= xiR ? Rs : std::clamp(Rs * (2 * (1 - x / hc0) / (1 - xiR) - 1), -Rs, Rs);
+        near("cột: ΣM = N·e", Rb * b * x * (hc0 - x / 2) + Rs * As * (hc0 - a), 1200 * e, 1e-6);
+        near("cột: ΣN = N", Rb * b * x + Rs * As - sigma * As, 1200, 1e-6);
+        const auto sh = rcShear(150, 0.25, 0.5, c, p);
+        check(sh.ok && sh.spacing > 0 && sh.spacing <= 0.23, "cốt đai: bước đai cần thiết", sh.spacing, 0);
+    }
+    {
+        const double L = 6, q = 10, E = 2.1e8, I = 7080e-8;
+        Model m = beamModel(L, 4, E, 46.5e-4, I);
+        fix(m, 0, true, true, false);
+        fix(m, 4, false, true, false);
+        for (int e = 0; e < 4; ++e) m.cases[0].elem.push_back(dload(e, -q, -q));
+        const auto r = analyze(m);
+        const auto d = checkDeflection(m, r.sets[0], findMembers(m), 250);
+        check(d.size() == 1, "độ võng: 1 nhịp", 0, 0);
+        if (d.size() == 1) {
+            near("f = 5qL⁴/384EI", d[0].f, 5 * q * std::pow(L, 4) / (384 * E * I), 1e-6);
+            near("vị trí f max giữa nhịp", d[0].xAt, L / 2, 1e-9);
+        }
+    }
+    {
+        Model m;
+        PileParams pp;
+        makePile(m, pp);
+        const auto r = analyze(m);
+        check(r.ok, r.error.c_str(), 0, 0);
+        if (r.ok) {
+            near("cọc: phản lực nền ngang = −H", r.sets[0].foundRx, -pp.H, 1e-6);
+            check(r.sets[0].U[0] > 0, "đầu cọc chuyển vị theo chiều H", r.sets[0].U[0], 0);
+        }
+        near("bề rộng quy ước bp = 1,5d + 0,5 (d < 0,8)", pileConventionalWidth(0.6), 1.4, 1e-12);
+    }
+}
+
 int main() {
+    testDesign();
     testDynamics();
     testArchTaperTrain();
     testForceMethod();

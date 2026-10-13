@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "core/Analysis.h"
+#include "core/Design.h"
 #include "core/Dynamics.h"
 #include "core/Eigen.h"
 #include "core/ForceMethod.h"
@@ -141,6 +142,14 @@ struct App {
     double harmFreq = 2.0;
     bool showDynamics = false, thPlay = false;
 
+    // ---- kiểm tra thiết kế
+    bool showDesign = false, showPileGen = false, showUtil = true, useBucklingMu = false, deflBeamsOnly = true;
+    int designSetMode = 0;
+    double deflN = 250;
+    fem::SteelParams steelP;
+    fem::RcParams rcP;
+    std::vector<double> util; // hệ số sử dụng từng phần tử để tô màu (−1: không có)
+
     // ---- dòng lệnh kiểu AutoCAD
     std::unique_ptr<Command> cmd;
     std::string cmdLine, lastCommand;
@@ -236,6 +245,9 @@ struct App {
     void matrixMethodDialog();
     void archDialog();
     void dynamicsDialog();
+    void designDialog();
+    void pileDialog();
+    std::vector<int> designSets() const;
     const fem::LoadSetResult* overrideShown(std::string* title = nullptr);
     const fem::LoadSetResult* forceMethodShown(std::string* title = nullptr);
     const fem::LoadTrain& currentTrain() const;

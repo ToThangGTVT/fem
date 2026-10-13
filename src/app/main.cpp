@@ -126,6 +126,7 @@ int main(int argc, char** argv) {
                 app.view = ResultView::M;
             }
             if (f.find('r') != std::string::npos) app.trainShow = true;
+            if (f.find('g') != std::string::npos) app.showDesign = true;
             if (f.find('p') != std::string::npos) {
                 app.showDynamics = true;
                 app.dynOpt.modes = 6;

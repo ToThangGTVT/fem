@@ -11,6 +11,8 @@ struct MaterialPreset {
     const char* name;
     const char* source;
     double E, nu, alpha, gamma; // kN/m², –, 1/°C, kN/m³
+    int kind;                   // 1: thép, 2: bê tông
+    double fd, ft;              // cường độ tính toán (MPa): thép f; bê tông Rb, Rbt
 };
 
 struct ProfilePreset {

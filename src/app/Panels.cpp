@@ -196,13 +196,16 @@ void App::modelPanel() {
                 ImGui::EndCombo();
             }
             int del = -1;
-            if (ImGui::BeginTable("mats", 6, tableFlags(), ImVec2(0, 0))) {
-                ImGui::TableSetupScrollFreeze(0, 1);
+            if (ImGui::BeginTable("mats", 9, tableFlags() | ImGuiTableFlags_ScrollX, ImVec2(0, 0))) {
+                ImGui::TableSetupScrollFreeze(1, 1);
                 ImGui::TableSetupColumn("Tên", 0, 2.2f);
                 ImGui::TableSetupColumn("E (kN/m²)", 0, 1.4f);
                 ImGui::TableSetupColumn("ν", 0, 0.7f);
                 ImGui::TableSetupColumn("α (1/°C)", 0, 1.0f);
                 ImGui::TableSetupColumn("γ (kN/m³)", 0, 0.9f);
+                ImGui::TableSetupColumn("Loại", 0, 1.0f);
+                ImGui::TableSetupColumn("f / Rb (MPa)", 0, 0.9f);
+                ImGui::TableSetupColumn("Rbt (MPa)", 0, 0.8f);
                 ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 22);
                 ImGui::TableHeadersRow();
                 for (size_t i = 0; i < m.materials.size(); ++i) {
@@ -224,6 +227,24 @@ void App::modelPanel() {
                     ImGui::TableNextColumn();
                     ImGui::SetNextItemWidth(-FLT_MIN);
                     editD(*this, "##g", x.gamma, "%.4g");
+                    ImGui::TableNextColumn();
+                    {
+                        static const char* kinds[] = {"Khác", "Thép", "Bê tông"};
+                        int out;
+                        ImGui::SetNextItemWidth(-FLT_MIN);
+                        if (editEnum(*this, "##kind", x.kind, kinds, 3, out)) {
+                            x.kind = out;
+                            changed();
+                        }
+                    }
+                    ImGui::TableNextColumn();
+                    ImGui::SetNextItemWidth(-FLT_MIN);
+                    editD(*this, "##fd", x.fd, "%.4g");
+                    ImGui::TableNextColumn();
+                    if (x.kind == 2) {
+                        ImGui::SetNextItemWidth(-FLT_MIN);
+                        editD(*this, "##ft", x.ft, "%.4g");
+                    }
                     ImGui::TableNextColumn();
                     if (ImGui::SmallButton("x")) del = (int)i;
                     ImGui::PopID();

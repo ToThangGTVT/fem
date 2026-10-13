@@ -3,8 +3,8 @@ FEM2D 1
 TITLE "Đập bê tông trọng lực, biến dạng phẳng (1 m dài)"
 PLANE STRAIN
 
-# MATERIAL tên E nu alpha gamma
-MATERIAL "Bê tông B15" 24000000 0.2 1e-05 25
+# MATERIAL tên E nu alpha gamma [loại(1 thép, 2 bê tông) f/Rb Rbt (MPa)]
+MATERIAL "Bê tông B15" 24000000 0.2 1e-05 25 2 8.5 0.75
 # SECTION tên A I h [y_trên y_dưới] [SHAPE loại p1..p6 | POLY n x1 y1 ... (mỗi chu tuyến)]
 
 # NODE x y

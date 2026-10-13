@@ -329,6 +329,21 @@ void App::viewport() {
             }
         }
     }
+    // hệ số sử dụng (cửa sổ kiểm tra thiết kế)
+    if (showDesign && showUtil && util.size() == m.elements.size()) {
+        for (size_t e = 0; e < m.elements.size(); ++e) {
+            if (util[e] < 0 || !m.elements[e].isBar()) continue;
+            const ImVec2 a = nodePos(m.elements[e].n[0], false), b = nodePos(m.elements[e].n[1], false);
+            const double u = util[e];
+            const ImU32 c = u <= 0.7 ? IM_COL32(60, 190, 100, 255) : u <= 1.0 ? IM_COL32(240, 180, 40, 255) : IM_COL32(240, 70, 60, 255);
+            dl->AddLine(a, b, c, 6.0f);
+            if (showValues) {
+                char buf[16];
+                std::snprintf(buf, sizeof buf, "%.2f", u);
+                label(dl, (a + b) * 0.5f, buf, c);
+            }
+        }
+    }
     // khớp đầu thanh
     for (size_t e = 0; e < m.elements.size(); ++e) {
         const Element& el = m.elements[e];

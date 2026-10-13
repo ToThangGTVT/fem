@@ -394,6 +394,9 @@ void App::frame() {
     if (showMatrixMethod) matrixMethodDialog();
     if (showArchGen) archDialog();
     if (showDynamics) dynamicsDialog();
+    if (showDesign) designDialog();
+    else util.clear();
+    if (showPileGen) pileDialog();
     if (showDemo) ImGui::ShowDemoWindow(&showDemo);
     savePrompt();
     clampIndices();
