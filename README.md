@@ -1,5 +1,7 @@
 # FEM2D — tính toán kết cấu phẳng bằng phần tử hữu hạn
 
+[![Build](https://github.com/ToThangGTVT/fem/actions/workflows/build.yml/badge.svg)](https://github.com/ToThangGTVT/fem/actions/workflows/build.yml)
+
 Chương trình C++17 tính kết cấu 2D theo phương pháp chuyển vị, giao diện **SDL3 + Dear ImGui** (docking).
 Các phần tử, quy ước dấu và cách trình bày biểu đồ theo giáo trình Cơ học kết cấu Việt Nam / Liên Xô
 (biểu đồ M vẽ về phía thớ căng, có gạch tung độ). Phần 3D sẽ bổ sung sau.
@@ -24,6 +26,14 @@ Giao diện kiểu AutoCAD (ribbon, dòng lệnh, thanh trạng thái), hai ch�
 | Dầm-tường (балка-стенка): phổ màu σx, phần tử Q4 | Phổ phản ứng TCVN 9386: phổ thiết kế, khối lượng hữu hiệu, nội lực SRSS |
 | ![Kiểm tra thiết kế BTCT](docs/images/kiem_tra_thiet_ke.png) | ![Bể nước tròn, bài toán đối xứng trục](docs/images/be_nuoc_doi_xung_truc.png) |
 | Kiểm tra thiết kế: cốt thép dầm, cột theo TCVN 5574:2018, tô màu trên sơ đồ | Bể nước tròn đối xứng trục, phần tử Q8: ứng suất vòng σθ do áp lực nước |
+
+## Tải về
+
+Bản dựng sẵn cho Windows x64, Linux x64 và macOS (universal: Apple Silicon + Intel) ở trang
+[Releases](https://github.com/ToThangGTVT/fem/releases). GitHub Actions build cả ba nền tảng ở mỗi lần push;
+đẩy tag `v*` (ví dụ `v1.0.0`) sẽ tự tạo bản phát hành kèm các gói.
+
+Trên macOS, bản tải về chưa ký số; nếu bị Gatekeeper chặn, chạy `xattr -dr com.apple.quarantine fem2d`.
 
 ## Biên dịch
 
