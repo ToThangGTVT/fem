@@ -390,6 +390,7 @@ struct RibbonLayout {
     float content = 0;  // chiều cao vùng nút
     float title = 0;    // chiều cao dải tên panel
     float panelX = 0;
+    float bandX = 0;    // mép trái dải tên của panel kế tiếp (các dải nối liền nhau)
     IconColors ic;
     App* app = nullptr;
 } R;
@@ -402,14 +403,15 @@ void beginPanel() {
 
 void endPanel(const char* title) {
     ImGui::EndGroup();
-    const float x0 = R.panelX - 4, x1 = std::max(ImGui::GetItemRectMax().x, R.panelX + 40) + 4;
+    const float x0 = R.bandX, x1 = std::max(ImGui::GetItemRectMax().x, R.panelX + 40) + 5;
     ImDrawList* dl = ImGui::GetWindowDrawList();
     const float ty = R.top + R.content;
     dl->AddRectFilled(ImVec2(x0, ty), ImVec2(x1, ty + R.title), R.app->ui.panelTitle);
     const ImVec2 ts = ImGui::CalcTextSize(title);
     dl->AddText(ImVec2((x0 + x1 - ts.x) * 0.5f, ty + (R.title - ts.y) * 0.5f), R.app->ui.textDim, title);
-    dl->AddLine(ImVec2(x1 + 1, R.top + 2), ImVec2(x1 + 1, ty + R.title - 2), R.app->ui.separator);
-    ImGui::SetCursorScreenPos(ImVec2(x1 + 10, R.top));
+    dl->AddLine(ImVec2(x1, R.top + 2), ImVec2(x1, ty + R.title), R.app->ui.separator);
+    R.bandX = x1 + 1;
+    ImGui::SetCursorScreenPos(ImVec2(x1 + 6, R.top));
 }
 
 bool bigButton(const char* label, Icon icon, const char* tip, bool active = false) {
@@ -713,6 +715,7 @@ void App::ribbon() {
     R.top = w0.y + rowH + 4;
     R.content = content;
     R.title = title;
+    R.bandX = w0.x;
     ImGui::SetCursorScreenPos(ImVec2(w0.x + 10, R.top));
     auto run = [&](const char* c) { startCommand(c); };
     const bool cmdIs = (bool)cmd;

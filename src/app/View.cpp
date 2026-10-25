@@ -379,21 +379,6 @@ void App::viewport() {
             }
         }
     }
-    // khớp đầu thanh
-    for (size_t e = 0; e < m.elements.size(); ++e) {
-        const Element& el = m.elements[e];
-        if (el.type != ElemType::Frame || !(el.hingeI || el.hingeJ)) continue;
-        const ImVec2 a = nodePos(el.n[0], false), b = nodePos(el.n[1], false), d = norm(b - a);
-        if (el.hingeI) {
-            dl->AddCircleFilled(a + d * 7, 4.2f, P.hinge);
-            dl->AddCircle(a + d * 7, 4.2f, P.bar, 0, 1.5f);
-        }
-        if (el.hingeJ) {
-            dl->AddCircleFilled(b - d * 7, 4.2f, P.hinge);
-            dl->AddCircle(b - d * 7, 4.2f, P.bar, 0, 1.5f);
-        }
-    }
-
     // ---- hình biến dạng
     if (drawDeformed) {
         for (size_t e = 0; e < m.elements.size(); ++e) {
@@ -908,6 +893,22 @@ void App::viewport() {
     }
 
     // ---- phản lực
+    // khoảng ký hiệu gối chiếm phía dưới nút (px), để mũi tên phản lực đứng không đè lên
+    auto supportDepth = [&](int node) {
+        const Support* sp = m.supportAt(node);
+        if (!sp) return 4.0f;
+        const float s = 11;
+        const bool fx = sp->fix[0], fy = sp->fix[1], fr = sp->fix[2];
+        float d = 8;
+        if (fx && fy && fr) {
+            const ImVec2 dir = connectedDir(node);
+            d = len(dir) < 0.1f || std::abs(dir.y) >= std::abs(dir.x) ? (dir.y > 0 ? s * 1.3f + 2 : 8.0f) : s * 1.3f + 2;
+        } else if (fx && fy) d = s * 1.4f + 7;
+        else if (fy && !fx && !fr) d = s * 1.3f + 13;
+        else if (fx && !fy && !fr) d = s * 0.8f + 10;
+        if (!fy && sp->k[1] > 0) d = std::max(d, 34.0f);
+        return d;
+    };
     if (showRes && showReactions && view != ResultView::Contour && view != ResultView::Influence && view != ResultView::Mode && !envMode) {
         const ImU32 c = P.reaction;
         for (size_t i = 0; i < m.nodes.size(); ++i) {
@@ -920,9 +921,11 @@ void App::viewport() {
                 if (showValues) label(dl, p + ImVec2(-sx * 50, 14), fmtVal(std::abs(rx)), c, ImVec2(sx > 0 ? 1.f : 0.f, 0.5f));
             }
             if (std::abs(ry) > tol) {
-                const float sy = ry > 0 ? 1.f : -1.f;
-                arrow(dl, p + ImVec2(16, sy * 52), p + ImVec2(16, sy * 22), c, 2.0f, 8);
-                if (showValues) label(dl, p + ImVec2(16, sy * 56), fmtVal(std::abs(ry)), c, ImVec2(0.5f, sy > 0 ? 0.f : 1.f));
+                // nằm dưới ký hiệu gối, trên đường thẳng đứng qua tâm gối
+                const float y0 = supportDepth((int)i) + 5, y1 = y0 + 30;
+                if (ry > 0) arrow(dl, p + ImVec2(0, y1), p + ImVec2(0, y0), c, 2.0f, 8);
+                else arrow(dl, p + ImVec2(0, y0), p + ImVec2(0, y1), c, 2.0f, 8);
+                if (showValues) label(dl, p + ImVec2(0, y1 + 4), fmtVal(std::abs(ry)), c, ImVec2(0.5f, 0.f));
             }
             if (std::abs(rm) > tol) {
                 momentArc(dl, p, 24, rm > 0, c, 1.8f);
@@ -938,13 +941,21 @@ void App::viewport() {
             if (el.type == ElemType::Truss && !anyBar[el.n[k]]) trussOnly[el.n[k]] = 1;
             if (el.type == ElemType::Frame) trussOnly[el.n[k]] = 0, anyBar[el.n[k]] = 1;
         }
-    std::vector<char> planeNode(m.nodes.size(), 0);
-    for (const auto& el : m.elements)
+    std::vector<char> planeNode(m.nodes.size(), 0), hinged(m.nodes.size(), 0);
+    for (const auto& el : m.elements) {
         if (el.isPlane())
             for (int k = 0; k < el.nodeCount(); ++k) planeNode[el.n[k]] = 1;
+        if (el.type == ElemType::Frame) {
+            if (el.hingeI) hinged[el.n[0]] = 1;
+            if (el.hingeJ) hinged[el.n[1]] = 1;
+        }
+    }
     for (size_t i = 0; i < m.nodes.size(); ++i) {
         const ImVec2 p = nodePos((int)i, false);
-        if (trussOnly[i]) {
+        if (hinged[i]) { // khớp đầu thanh: vẽ tại tâm nút
+            dl->AddCircleFilled(p, 4.2f, P.hinge);
+            dl->AddCircle(p, 4.2f, P.bar, 0, 1.5f);
+        } else if (trussOnly[i]) {
             dl->AddCircleFilled(p, 3.8f, P.hinge);
             dl->AddCircle(p, 3.8f, P.truss, 0, 1.4f);
         } else if (!planeNode[i] || anyBar[i] || showNodeIds || cmd) {
