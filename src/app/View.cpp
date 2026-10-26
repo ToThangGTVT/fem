@@ -261,6 +261,81 @@ void drawFluidBoundary(const App& a, ImDrawList* dl, const FluidMesh& M, const F
     }
 }
 
+ImU32 fluidInk(const App& a) { return a.darkTheme ? IM_COL32(255, 255, 255, 255) : IM_COL32(15, 20, 30, 255); }
+ImU32 waterLineColor(const App& a) { return a.darkTheme ? IM_COL32(255, 255, 255, 230) : IM_COL32(10, 40, 110, 230); }
+
+// Chú thích ký hiệu ngay dưới miền chảy: loại điều kiện biên; khi có kết quả thêm mặt nước, đường dòng, véc tơ
+void drawFluidLegend(const App& a, ImDrawList* dl, const FluidMesh& M, const FluidParams& prm, bool results) {
+    if (M.cellNodes.empty()) return;
+    struct Item {
+        int sym; // 0: đoạn thẳng, 1: mũi tên
+        ImU32 col;
+        float th;
+        std::string text;
+    };
+    std::vector<Item> items;
+    bool seen[6] = {};
+    for (int s = 0; s < (int)FluidSide::Count; ++s) {
+        const FluidBcKind k = prm.bc[s].kind;
+        if (!M.sideFaces[s] || seen[(int)k]) continue;
+        seen[(int)k] = true;
+        items.push_back({0, fluidBcColor(k), k == FluidBcKind::Wall ? 2.0f : 3.0f, fluidBcName(k)});
+    }
+    if (results) {
+        if (!g_fc.aCell.empty()) items.push_back({0, waterLineColor(a), 2.0f, "mặt nước α = 0,5"});
+        if (a.fluidStreams) items.push_back({0, withAlpha(fluidInk(a), 150), 1.2f, "đường dòng"});
+        if (a.fluidVectors) items.push_back({1, withAlpha(fluidInk(a), 210), 1.1f, "véc tơ vận tốc"});
+    }
+    if (items.empty()) return;
+
+    // khung bao miền trên màn hình
+    float x0 = FLT_MAX, x1 = -FLT_MAX, yb = -FLT_MAX;
+    for (int n : M.cellNodes) {
+        const ImVec2 p = a.cam.toScreen(M.px[n], M.py[n]);
+        x0 = std::min(x0, p.x);
+        x1 = std::max(x1, p.x);
+        yb = std::max(yb, p.y);
+    }
+    // chia hàng theo bề rộng khung nhìn
+    ImFont* f = ImGui::GetFont();
+    const float fs = ImGui::GetFontSize() * 0.85f, sw = 22, gap = 16, pad = 6, lh = fs + 6;
+    const ImVec2 c0 = a.cam.c0, c1 = a.cam.c1;
+    const float maxW = std::max(120.0f, c1.x - c0.x - 20 - 2 * pad);
+    std::vector<float> w(items.size());
+    std::vector<int> row(items.size());
+    float rowW = 0, boxW = 0;
+    int rows = 1;
+    for (size_t i = 0; i < items.size(); ++i) {
+        w[i] = sw + 5 + f->CalcTextSizeA(fs, FLT_MAX, 0, items[i].text.c_str()).x;
+        if (rowW > 0 && rowW + gap + w[i] > maxW) {
+            boxW = std::max(boxW, rowW);
+            rowW = 0;
+            ++rows;
+        }
+        rowW += (rowW > 0 ? gap : 0) + w[i];
+        row[i] = rows - 1;
+    }
+    boxW = std::max(boxW, rowW) + 2 * pad;
+    const float boxH = rows * lh + 2 * pad - 6;
+    // giữa, dưới miền; luôn nằm trong khung nhìn và tránh biểu tượng UCS ở góc trái dưới
+    ImVec2 o(std::floor(0.5f * (x0 + x1 - boxW)), std::floor(yb + 16));
+    o.y = std::max(c0.y + 8, std::min(o.y, c1.y - 10 - boxH));
+    o.x = std::max(c0.x + 10, std::min(o.x, c1.x - 10 - boxW));
+    if (o.y + boxH > c1.y - 96 && o.x < c0.x + 90) o.x = c0.x + 90;
+    dl->AddRectFilled(o, o + ImVec2(boxW, boxH), withAlpha(P.bg, 215), 3);
+    dl->AddRect(o, o + ImVec2(boxW, boxH), withAlpha(P.textDim, 120), 3);
+    float x = o.x + pad;
+    for (size_t i = 0; i < items.size(); ++i) {
+        if (i > 0 && row[i] != row[i - 1]) x = o.x + pad;
+        const float y = o.y + pad + row[i] * lh, ym = std::floor(y + fs * 0.5f) + 0.5f;
+        const Item& it = items[i];
+        if (it.sym == 1) arrow(dl, ImVec2(x + 2, ym), ImVec2(x + sw, ym), it.col, it.th, 6);
+        else dl->AddLine(ImVec2(x, ym), ImVec2(x + sw, ym), it.col, it.th);
+        dl->AddText(f, fs, ImVec2(x + sw + 5, y), P.text, it.text.c_str());
+        x += w[i] + gap;
+    }
+}
+
 void drawFluid(App& a, ImDrawList* dl) {
     const FluidSolver& S = *a.fluid;
     const FluidMesh& M = S.mesh();
@@ -304,7 +379,7 @@ void drawFluid(App& a, ImDrawList* dl) {
         for (int f = 0; f < M.nInternal; ++f) dl->AddLine(scr(M.fa[f]), scr(M.fb[f]), withAlpha(P.planeEdge, 70), 1.0f);
     // ---- VOF: đường mặt nước α = 0,5 (đường đồng mức trên các tam giác quạt tâm ô – nút)
     if (!g_fc.aCell.empty()) {
-        const ImU32 lc = a.darkTheme ? IM_COL32(255, 255, 255, 230) : IM_COL32(10, 40, 110, 230);
+        const ImU32 lc = waterLineColor(a);
         for (int c = 0; c < M.nCells; ++c) {
             const int s0 = M.cellStart[c], n = M.cellStart[c + 1] - s0;
             const ImVec2 pc = cam.toScreen(M.cx[c], M.cy[c]);
@@ -328,7 +403,7 @@ void drawFluid(App& a, ImDrawList* dl) {
         }
     }
 
-    const ImU32 ink = a.darkTheme ? IM_COL32(255, 255, 255, 255) : IM_COL32(15, 20, 30, 255);
+    const ImU32 ink = fluidInk(a);
     // ---- đường dòng (tính lại tối đa 2 lần/giây khi đang chạy)
     if (a.fluidStreams) {
         const double t = ImGui::GetTime();
@@ -374,6 +449,7 @@ void drawFluid(App& a, ImDrawList* dl) {
         }
     }
     drawFluidBoundary(a, dl, M, S.params());
+    drawFluidLegend(a, dl, M, S.params(), true);
 }
 
 } // namespace
@@ -639,7 +715,10 @@ void App::viewport() {
     // dòng chảy chất lỏng: trường màu, đường dòng, véc tơ; khi chưa tính chỉ tô biên theo điều kiện biên
     if (fluidOn) drawFluid(*this, dl);
     else if (m.flow.active) drawFlowDomain(*this, dl, m.flow, false);
-    else if (showFluid && fluidMeshError.empty() && currentFluidMesh().nCells > 0) drawFluidBoundary(*this, dl, fluidMesh, fluidP);
+    else if (showFluid && fluidMeshError.empty() && currentFluidMesh().nCells > 0) {
+        drawFluidBoundary(*this, dl, fluidMesh, fluidP);
+        drawFluidLegend(*this, dl, fluidMesh, fluidP, false);
+    }
     // trục đối xứng (bài toán đối xứng trục: r = x, trục z ≡ x = 0)
     if (m.planeMode == PlaneMode::Axisymmetric && m.hasPlane()) {
         const ImVec2 a = cam.toScreen(0, 0);
