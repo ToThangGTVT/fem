@@ -11,6 +11,7 @@
 #include "core/Dxf.h"
 #include "core/Dynamics.h"
 #include "core/Eigen.h"
+#include "core/Fluid.h"
 #include "core/ForceMethod.h"
 #include "core/Kinematics.h"
 #include "core/Model.h"
@@ -144,6 +145,27 @@ struct App {
     double harmFreq = 2.0;
     bool showDynamics = false, thPlay = false;
 
+    // ---- dòng chảy chất lỏng (FVM)
+    fem::FluidParams fluidP;
+    fem::ChannelSpec fluidSpec;
+    std::unique_ptr<fem::FluidSolver> fluid;
+    int fluidVersion = -1;        // phiên bản mô hình lúc khởi tạo bộ giải
+    int fluidSerial = 0;          // tăng mỗi lần khởi tạo (để làm mới bộ đệm vẽ)
+    int fluidField = 0;           // fem::FluidField
+    int fluidPreset = 2, fluidMedium = 0;
+    double fluidEndTime = 8;      // thời gian kết thúc (bài toán không dừng), s
+    bool showFluid = false, fluidRun = false, fluidVectors = true, fluidStreams = true, fluidMeshLines = false;
+    fem::Model fluidMeshModel;    // lưới tam giác của miền chảy khai báo (Trang chủ › Dòng chảy)
+    fem::FlowDomain flowDraft;    // khai báo đang soạn trong cửa sổ Khai báo dòng chảy
+    bool flowPopupRequest = false;
+    int flowSectionNext = -1;     // loại mặt cắt đã chọn trên ribbon cho lệnh DONGCHAY kế tiếp (−1: hỏi trên dòng lệnh)
+    fem::FluidMesh fluidMesh;     // lưới dựng từ mô hình hiện tại (để xem điều kiện biên khi chưa tính)
+    std::string fluidMeshError;
+    int fluidMeshVersion = -1;
+    std::vector<std::vector<std::array<double, 2>>> fluidLines; // đường dòng đang vẽ
+    int fluidLinesSerial = -1, fluidLinesIter = -1;
+    double fluidLinesClock = 0;
+
     // ---- kiểm tra thiết kế
     bool showDesign = false, showPileGen = false, showUtil = true, useBucklingMu = false, deflBeamsOnly = true;
     int designSetMode = 0;
@@ -261,6 +283,14 @@ struct App {
     void dynamicsDialog();
     void designDialog();
     void pileDialog();
+    void fluidDialog();
+    void fluidApplyPreset(int k);  // dựng miền tính, lưới và điều kiện biên của một bài toán mẫu
+    bool fluidInit();              // khởi tạo bộ giải từ mô hình hiện tại (miền chảy khai báo, hoặc các phần tử phẳng)
+    void flowPopup();              // cửa sổ Khai báo dòng chảy
+    bool flowFields(fem::FlowDomain& f, bool inPanel); // ô nhập thông số dòng chảy; inPanel: sửa trực tiếp mô hình
+    void editFlow();               // mở cửa sổ khai báo với dòng chảy hiện có
+    bool fluidShown() const { return showFluid && fluid && fluidVersion == modelVersion; }
+    const fem::FluidMesh& currentFluidMesh(); // lưới của mô hình hiện tại (dựng lại khi mô hình đổi)
     std::vector<int> designSets() const;
     const fem::LoadSetResult* overrideShown(std::string* title = nullptr);
     const fem::LoadSetResult* forceMethodShown(std::string* title = nullptr);
@@ -272,3 +302,6 @@ struct App {
 };
 
 Palette makePalette(bool dark);
+ImU32 fluidBcColor(fem::FluidBcKind k); // màu biên theo loại điều kiện biên (FluidUI.cpp)
+// Vẽ miền chảy khai báo: nền, cửa vào (mũi tên), cửa ra, hai biên bên (View.cpp)
+void drawFlowDomain(const App& a, ImDrawList* dl, const fem::FlowDomain& f, bool preview);

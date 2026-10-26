@@ -343,6 +343,63 @@ const std::vector<Topic>& topics() {
           {"Xếp đoàn tải bất lợi",
            {"Chọn đoàn tải mẫu: xe H30, xe tải và xe hai trục HL-93 (kèm tải làn), НК-80; hoặc tự nhập P@khoảng cách.",
             "Chương trình tìm vị trí cho giá trị lớn nhất và nhỏ nhất; \"Vẽ đoàn tải ở vị trí bất lợi\" để xem."}}}},
+        {"Dòng chảy (FVM)",
+         "Mô phỏng chất lỏng không nén 2D bằng phương pháp thể tích hữu hạn",
+         "Trang chủ › Chất lỏng › Dòng chảy; kết quả: Phân tích › Chất lỏng",
+         "DONGCHAY",
+         {{"Các bước",
+           {"1. Trang chủ › Dòng chảy (lệnh DONGCHAY), chọn loại mặt cắt: Mặt bằng (nhìn từ trên xuống, hai biên bên là "
+            "bờ) hoặc Mặt cắt đứng (biên dưới là mặt đất / đáy — cạnh bên thấp hơn, dòng chảy được phép dốc; biên trên là "
+            "mặt thoáng phẳng, mặt thoáng tự do hoặc trần cứng; có trọng lực). Trên dòng lệnh gõ B hoặc D.",
+            "Nhấp điểm A rồi B của cạnh cửa vào — bề rộng (mặt bằng) hoặc độ sâu (mặt cắt đứng, A ở đáy, B ở mặt thoáng) "
+            "bằng AB; chất lỏng chảy vuông góc với AB.",
+            "2. Nhấp về phía dòng chảy để định chiều dài miền (hoặc gõ chiều dài, m). Cửa sổ Khai báo dòng chảy hiện ra: "
+            "vận tốc trung bình U, phân bố đều / parabol, chất lỏng (nước, không khí...), hai biên bên thành cứng hay trượt, "
+            "kích thước ô lưới, dừng hay theo thời gian.",
+            "3. Vẽ vật cản bằng lệnh L thành đường khép kín (gõ C hoặc nhấp lại điểm đầu để khép). Vật cản được phép chạm "
+            "hoặc cắm qua biên: nhà đặt trên mặt đất, trụ trên đáy sông, mỏ hàn sát bờ. Vẽ được nhiều vật cản, hình dạng bất kỳ.",
+            "4. Bấm Tính (F5): chương trình tạo lưới tam giác bám theo đường viền vật cản (mịn sát vật cản, thưa dần ra xa), "
+            "giải và hiện kết quả trực tiếp.",
+            "Sửa thông số: Trang chủ › Sửa dòng chảy, hoặc bỏ chọn mọi đối tượng rồi sửa trong bảng Thuộc tính. "
+            "Sửa hình vật cản (kéo grip, di chuyển...) rồi bấm F5 để tính lại. Khai báo được lưu trong file .fem."}},
+          {"Bài toán mẫu",
+           {"Cửa sổ Dòng chảy chất lỏng (Phân tích › Chất lỏng, lệnh CHATLONG): chọn bài toán mẫu (hộp kín nắp trượt, trụ "
+            "tròn / trụ vuông trong kênh, bậc lùi, kênh phẳng) rồi bấm \"Tạo bài toán mẫu và chạy\".",
+            "Bài toán dừng lặp đến khi sai số dư nhỏ hơn ngưỡng; bài toán không dừng tính đến thời điểm đã chọn, "
+            "kết quả cập nhật trực tiếp trên sơ đồ."}},
+          {"Miền tính",
+           {"Miền chất lỏng là toàn bộ phần tử phẳng của mô hình; mỗi phần tử (T3, Q4, T6, Q8 — chỉ lấy nút góc) là một "
+            "thể tích kiểm tra.",
+            "Tự tạo lưới kênh chữ nhật có vật cản tròn hoặc chữ nhật (lưới O quanh trụ, giãn dần ra xa), hoặc dùng Lưới "
+            "phẳng / nhập DXF rồi xóa phần tử để tạo vật cản, lỗ.",
+            "Biên được nhận theo hình học: bốn cạnh của hình chữ nhật bao miền và biên trong (mọi cạnh biên còn lại)."}},
+          {"Điều kiện biên",
+           {"Thành cứng (u = 0, không trượt); thành di động (vận tốc tiếp tuyến cho trước); cửa vào (vận tốc đều "
+            "hoặc parabol, u, v là giá trị lớn nhất); cửa ra (p = 0, građien vận tốc bằng 0); đối xứng / trượt.",
+            "Màu biên trên sơ đồ: xám — thành cứng, cam — thành di động, xanh dương — cửa vào, đỏ — cửa ra, "
+            "xanh lá — đối xứng."}},
+          {"Phương pháp",
+           {"Navier–Stokes không nén, ẩn đặt tại tâm ô; ghép áp suất – vận tốc theo SIMPLE, nội suy lưu lượng Rhie–Chow.",
+            "Đối lưu: ngược dòng bậc nhất hoặc ngược dòng tuyến tính bậc hai; khuếch tán có hiệu chỉnh không trực giao; "
+            "thời gian: Euler ẩn hoặc BDF2.",
+            "Phân kỳ: giảm αu (0,5–0,7), αp (0,2–0,3), giảm Δt, hoặc dùng sơ đồ bậc nhất.",
+            "Mô hình dòng chảy: Tự động (chảy rối k-ε khi Re > 2300), Chảy tầng, hoặc Chảy rối k-ε. k-ε chuẩn với hàm tường "
+            "(dùng được với lưới thô), sinh rối Kato–Launder; cường độ rối ở cửa vào mặc định 5%. Bài toán dừng có k-ε dùng "
+            "sơ đồ bậc nhất để hội tụ.",
+            "Chọn Chảy tầng ở Re lớn: không có nghiệm dừng, chương trình tự tính theo thời gian, kết quả chỉ định tính."}},
+          {"Mặt thoáng tự do (VOF)",
+           {"Mặt cắt đứng › Biên trên: Mặt thoáng tự do. AB gồm cả lớp không khí phía trên; nhập độ sâu nước ở cửa vào. "
+            "Hai pha nước – không khí, phân số thể tích α vận chuyển bằng sơ đồ nén mặt phân cách HRIC; biên trên thông khí "
+            "(p = 0).",
+            "Mực nước ban đầu có thể khác cửa vào; \"Nước ban đầu chỉ trong đoạn dài\" > 0 cho bài toán vỡ đập, xả cửa cống.",
+            "Luôn tính theo thời gian, Δt tự giảm theo số Courant. Đại lượng α tỉ lệ nước; đường trắng là mặt nước α = 0,5. "
+            "Áp suất là áp suất thực (gồm thủy tĩnh); lực lên công trình gồm cả lực va đập của sóng."}},
+          {"Kết quả",
+           {"Phổ màu |u|, u, v, p, Cp, xoáy ω; véc tơ vận tốc, đường dòng; rê chuột lên sơ đồ để xem giá trị tại điểm.",
+            "Lực chất lỏng lên biên trong (N/m, cho 1 m bề dày), hệ số cản Cd, nâng Cl, số Strouhal St (không dừng), "
+            "phân bố Cp quanh vật cản, đồ thị sai số dư và hệ số lực theo vòng lặp / thời gian.",
+            "Mặt cắt đứng có thủy tĩnh: thêm đại lượng p toàn phần = p + ρ·g·h; lực lên công trình gồm áp lực tĩnh và lực đẩy nổi.",
+            "Đơn vị SI: ρ (kg/m³), μ (Pa·s), p (Pa). Lực N/m × 10⁻³ = kN/m dùng làm tải trọng cho kết cấu."}}}},
 
         // ------------------------------------------------------------------ kết quả
         {"Xem kết quả",

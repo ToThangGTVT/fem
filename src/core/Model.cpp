@@ -150,7 +150,57 @@ bool Model::hasBars() const {
     return false;
 }
 
+double FlowDomain::width() const { return std::hypot(bx - ax, by - ay); }
+
+void FlowDomain::direction(double& nx, double& ny) const {
+    const double w = width();
+    const double tx = w > 0 ? (bx - ax) / w : 0, ty = w > 0 ? (by - ay) / w : 1;
+    nx = -ty * side; // pháp tuyến bên trái của A→B nhân với chiều chảy
+    ny = tx * side;
+}
+
+void FlowDomain::corners(double c[4][2]) const {
+    double nx, ny;
+    direction(nx, ny);
+    c[0][0] = ax, c[0][1] = ay;
+    c[1][0] = bx, c[1][1] = by;
+    c[2][0] = bx + length * nx, c[2][1] = by + length * ny;
+    c[3][0] = ax + length * nx, c[3][1] = ay + length * ny;
+}
+
+bool FlowDomain::groundAtB() const {
+    double c[4][2];
+    corners(c);
+    return c[1][1] + c[2][1] < c[0][1] + c[3][1];
+}
+
+double FlowDomain::waterLevelY(double depth) const {
+    const double w = width();
+    const bool gB = groundAtB();
+    const double gy = gB ? by : ay, ty = gB ? ay : by;
+    return w > 0 ? gy + (ty - gy) / w * depth : gy;
+}
+
 void Model::bounds(double& x0, double& y0, double& x1, double& y1) const {
+    if (flow.active) {
+        double c[4][2];
+        flow.corners(c);
+        x0 = x1 = c[0][0];
+        y0 = y1 = c[0][1];
+        for (auto& p : c) {
+            x0 = std::min(x0, p[0]);
+            y0 = std::min(y0, p[1]);
+            x1 = std::max(x1, p[0]);
+            y1 = std::max(y1, p[1]);
+        }
+        for (auto& n : nodes) {
+            x0 = std::min(x0, n.x);
+            y0 = std::min(y0, n.y);
+            x1 = std::max(x1, n.x);
+            y1 = std::max(y1, n.y);
+        }
+        return;
+    }
     if (nodes.empty()) {
         x0 = y0 = 0;
         x1 = y1 = 10;

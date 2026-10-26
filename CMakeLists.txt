@@ -31,6 +31,8 @@ add_library(femcore STATIC
   src/core/Dxf.cpp
   src/core/Report.cpp
   src/core/PlaneElements.cpp
+  src/core/Fluid.cpp
+  src/core/TriMesher.cpp
 )
 target_include_directories(femcore PUBLIC src)
 if(MSVC)
@@ -103,6 +105,7 @@ if(FEM_BUILD_GUI)
     src/app/Textbook.cpp
     src/app/DynamicsUI.cpp
     src/app/DesignUI.cpp
+    src/app/FluidUI.cpp
     src/app/Guide.cpp
     src/app/SvgIcon.cpp
   )

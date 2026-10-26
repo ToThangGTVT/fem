@@ -43,6 +43,8 @@ struct Coupling {
 std::string validate(const Model& m) {
     if (m.elements.empty()) return "Mô hình chưa có phần tử.";
     if (m.cases.empty()) return "Chưa có trường hợp tải.";
+    if (std::all_of(m.supports.begin(), m.supports.end(), [](const Support& s) { return s.empty(); }))
+        return "Chưa có gối tựa: kết cấu là hệ biến hình.";
     const int nn = (int)m.nodes.size();
     for (size_t e = 0; e < m.elements.size(); ++e) {
         const Element& el = m.elements[e];

@@ -12,6 +12,8 @@
 #include "core/Report.h"
 #include "core/Eigen.h"
 #include "core/Examples.h"
+#include "core/Fluid.h"
+#include "core/TriMesher.h"
 #include "core/ForceMethod.h"
 #include "core/Kinematics.h"
 #include "core/SectionGeom.h"
@@ -1639,7 +1641,586 @@ static void testQuadraticMisc() {
     }
 }
 
+// ---------------------------------------------------------------- dòng chảy chất lỏng (FVM)
+static Model fluidDomain(const ChannelSpec& s) {
+    Model m;
+    m.materials.push_back(Material{});
+    m.cases.push_back(LoadCase("TH1"));
+    meshChannel(m, s, 0);
+    return m;
+}
+
+static bool solveSteady(FluidSolver& sv, int maxIt = 6000) {
+    for (int i = 0; i < maxIt && !sv.converged(); ++i)
+        if (!sv.step()) return false;
+    return sv.converged();
+}
+
+// u nhỏ nhất trên đường thẳng đứng x = 0,5 của hộp kín
+static double cavityUmin(const FluidSolver& sv) {
+    double umin = 1, u, v, p;
+    for (int i = 1; i < 400; ++i)
+        if (sv.probe(0.5, i / 400.0, u, v, p)) umin = std::min(umin, u);
+    return umin;
+}
+
+static void testFluid() {
+    std::printf("Dòng chảy chất lỏng FVM: Poiseuille, hộp kín, Schäfer–Turek\n");
+    // ---- lưới: nhận diện biên, phát hiện phần tử chồng lấn
+    {
+        ChannelSpec s;
+        s.obstacle = 0;
+        s.L = 1;
+        s.H = 0.5;
+        s.h = 0.1;
+        Model m = fluidDomain(s);
+        FluidMesh M;
+        check(buildFluidMesh(m, M).empty(), "dựng lưới FVM", 0, 0);
+        near("số ô", M.nCells, 50);
+        near("mặt biên trái", M.sideFaces[(int)FluidSide::Left], 5);
+        near("mặt biên dưới", M.sideFaces[(int)FluidSide::Bottom], 10);
+        near("không có biên trong", M.sideFaces[(int)FluidSide::Inner], 0);
+        near("số mặt trong", M.nInternal, 4 * 10 + 9 * 5);
+        double V = 0;
+        for (double v : M.vol) V += v;
+        near("tổng diện tích ô", V, 0.5);
+        m.elements.push_back(m.elements[0]);
+        check(!buildFluidMesh(m, M).empty(), "phát hiện phần tử trùng nhau", 0, 0);
+    }
+    FluidParams pois;
+    pois.rho = 1;
+    pois.mu = 1;
+    pois.tol = 1e-8;
+    pois.bc[(int)FluidSide::Left] = {FluidBcKind::Inlet, 1, 0, true};
+    pois.bc[(int)FluidSide::Right] = {FluidBcKind::Outlet};
+    // ---- dòng Poiseuille: dp/dx = −8μ·Umax/H², hội tụ bậc hai trên tứ giác và tam giác lệch
+    for (int tri = 0; tri < 2; ++tri) {
+        double err[2];
+        for (int r = 0; r < 2; ++r) {
+            ChannelSpec s;
+            s.obstacle = 0;
+            s.L = 1;
+            s.H = 0.1;
+            s.h = 0.1 / (8 << r);
+            s.triangles = tri;
+            FluidSolver sv;
+            check(sv.init(fluidDomain(s), pois), "khởi tạo Poiseuille", 0, 0);
+            check(solveSteady(sv), "Poiseuille hội tụ", sv.iteration(), 0);
+            double u, v, p1, p2;
+            sv.probe(0.4, 0.05, u, v, p1);
+            sv.probe(0.8, 0.05, u, v, p2);
+            err[r] = std::abs((p2 - p1) / 0.4 + 800);
+            check(sv.massImbalance() < 1e-6, "bảo toàn khối lượng", sv.massImbalance(), 0);
+        }
+        check(err[1] < 0.02 * 800, tri ? "Poiseuille tam giác: dp/dx sai < 2%" : "Poiseuille tứ giác: dp/dx sai < 2%", err[1], 0);
+        check(err[1] < 0.4 * err[0], "Poiseuille: sai số giảm khi chia mịn (bậc hai)", err[1] / err[0], 0.25);
+    }
+    // ---- hộp kín nắp trượt Re = 100: u nhỏ nhất trên đường giữa −0,2140 (Botella & Peyret; Ghia: −0,2109)
+    FluidParams cav;
+    cav.rho = 1;
+    cav.mu = 0.01;
+    cav.bc[(int)FluidSide::Top] = {FluidBcKind::MovingWall, 1, 0, false};
+    ChannelSpec cs;
+    cs.obstacle = 0;
+    cs.L = cs.H = 1;
+    cs.h = 1.0 / 40;
+    double uminRef = 0; // nghiệm dừng hội tụ chặt, dùng so sánh với bài toán không dừng
+    for (int tri = 0; tri < 2; ++tri) {
+        cs.triangles = tri;
+        FluidSolver sv;
+        sv.init(fluidDomain(cs), cav);
+        check(solveSteady(sv), "hộp kín hội tụ", sv.iteration(), 0);
+        const double umin = cavityUmin(sv);
+        near(tri ? "hộp kín (tam giác): u nhỏ nhất" : "hộp kín (tứ giác): u nhỏ nhất", umin, -0.2140, 0.02);
+    }
+    cs.triangles = false;
+    // nghiệm hội tụ không phụ thuộc hệ số giảm dư (hiệu chỉnh Majumdar)
+    {
+        FluidParams c2 = cav;
+        c2.alphaU = 0.5;
+        c2.alphaP = 0.2;
+        c2.tol = 1e-7;
+        FluidParams c3 = cav;
+        c3.tol = 1e-7;
+        FluidSolver a, b;
+        a.init(fluidDomain(cs), c2);
+        b.init(fluidDomain(cs), c3);
+        solveSteady(a, 20000);
+        solveSteady(b, 20000);
+        near("nghiệm không phụ thuộc αu, αp", cavityUmin(a), cavityUmin(b), 1e-4);
+        uminRef = cavityUmin(b);
+    }
+    // bài toán không dừng tiến tới trạng thái dừng: trùng nghiệm dừng, không phụ thuộc Δt (hiệu chỉnh Choi)
+    for (TimeScheme ts : {TimeScheme::Euler, TimeScheme::BDF2}) {
+        FluidParams ct = cav;
+        ct.transient = true;
+        ct.timeScheme = ts;
+        ct.dt = 0.5;
+        ct.outerIters = 30;
+        ct.outerTol = 1e-7;
+        ct.alphaU = 0.8;
+        ct.alphaP = 0.5;
+        FluidSolver sv;
+        sv.init(fluidDomain(cs), ct);
+        for (int i = 0; i < 80; ++i) sv.step();
+        near(ts == TimeScheme::Euler ? "không dừng (Euler) → nghiệm dừng" : "không dừng (BDF2) → nghiệm dừng", cavityUmin(sv),
+             uminRef, 5e-4);
+    }
+    // ---- Schäfer–Turek 2D-1 (Re = 20): Cd = 5,5795, Δp = 0,11752
+    {
+        ChannelSpec s; // mặc định: kênh 2,2×0,41, trụ D = 0,1 tại (0,2; 0,2)
+        FluidParams p;
+        p.rho = 1;
+        p.mu = 1e-3;
+        p.bc[(int)FluidSide::Left] = {FluidBcKind::Inlet, 0.3, 0, true};
+        p.bc[(int)FluidSide::Right] = {FluidBcKind::Outlet};
+        FluidSolver sv;
+        check(sv.init(fluidDomain(s), p), "khởi tạo trụ tròn", 0, 0);
+        near("Re = 20", sv.reynolds(), 20, 1e-9);
+        check(solveSteady(sv), "trụ tròn hội tụ", sv.iteration(), 0);
+        const FluidForces F = sv.forces();
+        near("Schäfer–Turek: Cd", F.Cd, 5.5795, 0.02);
+        double u, v, pa, pb;
+        sv.probe(0.15, 0.2, u, v, pa);
+        sv.probe(0.25, 0.2, u, v, pb);
+        near("Schäfer–Turek: Δp trước – sau trụ", pa - pb, 0.11752, 0.02);
+        const auto cp = sv.innerCp();
+        check(!cp.empty() && std::abs(cp.front()[0]) < 180, "phân bố Cp quanh trụ", (double)cp.size(), 80);
+        double cpMax = -1e9;
+        for (const auto& c : cp) cpMax = std::max(cpMax, c[1]);
+        check(cpMax > 1.0, "Cp lớn nhất tại điểm đón dòng > 1 (Re nhỏ)", cpMax, 1.0);
+        check(!sv.streamlines(sv.defaultSeeds(10)).empty(), "đường dòng", 0, 0);
+    }
+    // ---- kiểm tra dữ liệu vào
+    {
+        FluidParams p = pois;
+        p.bc[(int)FluidSide::Right] = {FluidBcKind::Wall};
+        ChannelSpec s;
+        s.obstacle = 0;
+        s.L = 1;
+        s.H = 0.1;
+        s.h = 0.025;
+        FluidSolver sv;
+        check(!sv.init(fluidDomain(s), p), "báo lỗi: có cửa vào mà không có cửa ra", 0, 0);
+        Model empty;
+        check(!sv.init(empty, pois), "báo lỗi: chưa có phần tử phẳng", 0, 0);
+    }
+}
+
+// Miền chảy khai báo (cạnh cửa vào AB, chiều dài L) + vật cản vẽ bằng thanh khép kín; quay toàn bộ một góc ang
+static Model flowModel(double ang, bool obstacle = true) {
+    Model m;
+    m.materials.push_back(Material{});
+    m.sections.push_back(Section{});
+    m.cases.push_back(LoadCase("TH1"));
+    const double c = std::cos(ang), s = std::sin(ang);
+    auto R = [&](double x, double y) { return std::array<double, 2>{c * x - s * y, s * x + c * y}; };
+    FlowDomain& f = m.flow;
+    f.active = true;
+    const auto A = R(0, 0), B = R(0, 0.41);
+    f.ax = A[0], f.ay = A[1], f.bx = B[0], f.by = B[1];
+    f.side = -1; // bên phải của A→B (hướng +x khi chưa quay)
+    f.length = 2.2;
+    f.U = 0.2;
+    f.parabolic = true;
+    f.rho = 1;
+    f.mu = 1e-3;
+    f.medium = 4;
+    f.h = 0.006;
+    f.hFar = 0.03;
+    if (obstacle) {
+        const int n = 64, n0 = (int)m.nodes.size();
+        for (int i = 0; i < n; ++i) {
+            const auto P = R(0.2 + 0.05 * std::cos(2 * M_PI * i / n), 0.2 + 0.05 * std::sin(2 * M_PI * i / n));
+            m.nodes.push_back({P[0], P[1]});
+        }
+        for (int i = 0; i < n; ++i) {
+            Element e;
+            e.type = ElemType::Frame;
+            e.n = {n0 + i, n0 + (i + 1) % n, -1, -1};
+            m.elements.push_back(e);
+        }
+    }
+    return m;
+}
+
+static void testFlowDomain() {
+    std::printf("Dòng chảy khai báo: lưới tam giác Delaunay, vật cản vẽ bằng thanh\n");
+    // ---- lưới tam giác: diện tích đúng, góc nhỏ nhất ≥ 20°, vật cản lõm
+    {
+        DomainSpec ds;
+        ds.outer = {{0, 0}, {1, 0}, {1, 0.5}, {0, 0.5}};
+        ds.holes = {{{0.3, 0.2}, {0.5, 0.25}, {0.3, 0.3}, {0.35, 0.25}}}; // mũi tên lõm
+        ds.h = 0.01;
+        ds.hFar = 0.05;
+        Model m;
+        std::string err;
+        const int n = meshDomain(m, ds, 0, &err);
+        check(n > 0, ("lưới tam giác: " + err).c_str(), n, 0);
+        double A = 0, minAng = 180;
+        for (const auto& e : m.elements) {
+            const Node &a = m.nodes[e.n[0]], &b = m.nodes[e.n[1]], &c = m.nodes[e.n[2]];
+            A += 0.5 * ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x));
+            const double L[3] = {std::hypot(b.x - c.x, b.y - c.y), std::hypot(a.x - c.x, a.y - c.y), std::hypot(a.x - b.x, a.y - b.y)};
+            for (int k = 0; k < 3; ++k) {
+                const double x = L[k], y = L[(k + 1) % 3], z = L[(k + 2) % 3];
+                minAng = std::min(minAng, std::acos(std::clamp((y * y + z * z - x * x) / (2 * y * z), -1.0, 1.0)) * 180 / M_PI);
+            }
+        }
+        near("lưới tam giác: tổng diện tích = miền − vật cản", A, 0.5 - std::abs(polygonArea(ds.holes[0])), 1e-9);
+        check(minAng >= 20, "lưới tam giác: góc nhỏ nhất ≥ 20°", minAng, 20);
+        // vật cản cắt biên phải: chỉ phần nằm trong miền bị khoét
+        ds.holes.push_back({{0.9, 0.2}, {1.2, 0.2}, {1.2, 0.3}, {0.9, 0.3}});
+        Model m2;
+        check(meshDomain(m2, ds, 0, &err) > 0, ("vật cản cắt biên miền: " + err).c_str(), 0, 0);
+        double A2 = 0;
+        for (const auto& e : m2.elements) {
+            const Node &a = m2.nodes[e.n[0]], &b = m2.nodes[e.n[1]], &c = m2.nodes[e.n[2]];
+            A2 += 0.5 * ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x));
+        }
+        near("vật cản cắt biên: diện tích", A2, 0.5 - std::abs(polygonArea(ds.holes[0])) - 0.1 * 0.1, 1e-9);
+    }
+    // ---- vòng thanh khép kín
+    {
+        Model m = flowModel(0);
+        Element e;
+        e.type = ElemType::Frame;
+        m.nodes.push_back({1, 0.1});
+        m.nodes.push_back({1.2, 0.1});
+        e.n = {(int)m.nodes.size() - 2, (int)m.nodes.size() - 1, -1, -1};
+        m.elements.push_back(e); // một thanh hở: bỏ qua
+        std::vector<int> bars;
+        for (int i = 0; i < (int)m.elements.size(); ++i) bars.push_back(i);
+        int ignored = 0;
+        const auto loops = closedLoops(m, bars, &ignored);
+        check(loops.size() == 1 && loops[0].size() == 64 && ignored == 1, "tìm vòng thanh khép kín", (double)loops.size(), 1);
+    }
+    // ---- trụ tròn vẽ bằng 64 thanh trong miền chảy (Schäfer–Turek 2D-1); quay 30° cho cùng kết quả
+    double cd0 = 0;
+    for (double ang : {0.0, M_PI / 6}) {
+        Model m = flowModel(ang), mesh;
+        FluidParams p;
+        std::string note;
+        const std::string err = buildFlowProblem(m, mesh, p, &note);
+        check(err.empty(), ("lập bài toán dòng chảy: " + err).c_str(), 0, 0);
+        FluidSolver sv;
+        check(sv.init(mesh, p), "khởi tạo dòng chảy khai báo", 0, 0);
+        near("Re = 20", sv.reynolds(), 20, 1e-6);
+        near("biên trong = 64 cạnh vật cản (chia nhỏ)", sv.mesh().sideFaces[(int)FluidSide::Inner] >= 64, 1);
+        check(solveSteady(sv), "dòng chảy khai báo hội tụ", sv.iteration(), 0);
+        const FluidForces F = sv.forces();
+        if (ang == 0) {
+            cd0 = F.Cd;
+            near("trụ vẽ bằng thanh: Cd (Schäfer–Turek 5,58)", F.Cd, 5.5795, 0.04);
+        } else
+            near("miền chảy xoay 30°: Cd không đổi", F.Cd, cd0, 0.01);
+    }
+    // ---- ghi / đọc khai báo dòng chảy
+    {
+        Model m = flowModel(0.3, false), r;
+        m.flow.transient = true;
+        m.flow.slipWalls = true;
+        std::string err;
+        check(modelFromText(modelToText(m), r, err), err.c_str(), 0, 0);
+        check(r.flow.active && r.flow.transient && r.flow.slipWalls && r.flow.parabolic && r.flow.side == -1, "ghi/đọc FLOW", 0, 0);
+        near("ghi/đọc FLOW: xB", r.flow.bx, m.flow.bx, 1e-10);
+        near("ghi/đọc FLOW: U", r.flow.U, 0.2, 1e-12);
+    }
+    // ---- vật cản cắt biên miền chảy (tam giác cắm qua đáy kênh)
+    {
+        Model m = flowModel(0, false), mesh;
+        for (auto [x, y] : {std::pair{0.5, -0.05}, {0.7, -0.05}, {0.6, 0.1}}) m.nodes.push_back({x, y});
+        for (int i = 0; i < 3; ++i) {
+            Element e;
+            e.type = ElemType::Frame;
+            e.n = {i, (i + 1) % 3, -1, -1};
+            m.elements.push_back(e);
+        }
+        FluidParams p;
+        check(buildFlowProblem(m, mesh, p).empty(), "vật cản cắt biên miền chảy: phần trong miền được khoét", 0, 0);
+    }
+}
+
+// Mặt cắt đứng: miền rộng (cao) H, dài L, chảy theo +x; vật cản chữ nhật [x0, x1]×[y0, y1] vẽ bằng 4 thanh
+static Model sectionModel(int section, double U, double x0, double x1, double y0, double y1) {
+    Model m;
+    m.materials.push_back(Material{});
+    m.sections.push_back(Section{});
+    m.cases.push_back(LoadCase("TH1"));
+    FlowDomain& f = m.flow;
+    f.active = true;
+    f.section = section;
+    f.ax = 0, f.ay = 0, f.bx = 0, f.by = 2; // cửa vào thẳng đứng từ đáy (y = 0) lên mặt thoáng (y = 2)
+    f.side = -1;
+    f.length = 6;
+    f.U = U;
+    f.medium = 0;
+    f.rho = 1000;
+    f.mu = 1;
+    f.h = 0.05;
+    f.hFar = 0.2;
+    const double P[4][2] = {{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}};
+    for (auto& q : P) m.nodes.push_back({q[0], q[1]});
+    for (int i = 0; i < 4; ++i) {
+        Element e;
+        e.type = ElemType::Frame;
+        e.n = {i, (i + 1) % 4, -1, -1};
+        m.elements.push_back(e);
+    }
+    return m;
+}
+
+static void testFlowSections() {
+    std::printf("Dòng chảy: mặt bằng / mặt cắt đứng, vật cản chạm biên, áp suất thủy tĩnh\n");
+    const double g = 9.81, rho = 1000;
+    auto solve = [](const Model& m, FluidSolver& sv, const char* what) {
+        Model mesh;
+        FluidParams p;
+        const std::string err = buildFlowProblem(m, mesh, p);
+        check(err.empty(), (std::string(what) + ": " + err).c_str(), 0, 0);
+        if (!err.empty()) return false;
+        check(sv.init(mesh, p), what, 0, 0);
+        return solveSteady(sv, 4000);
+    };
+    // ---- vật cản ngập hoàn toàn, nước gần như đứng yên: lực = lực đẩy Acsimet ρ·g·V hướng lên
+    {
+        FluidSolver sv;
+        solve(sectionModel(1, 1e-6, 2, 3, 0.5, 1.0), sv, "vật cản ngập trong nước tĩnh");
+        const FluidForces F = sv.forces();
+        near("nước tĩnh: lực đẩy Acsimet Fy = ρ·g·V", F.Fy, rho * g * 0.5, 2e-3);
+        near("nước tĩnh: Fx = 0", F.Fx, 0, 0, 1e-3 * rho * g * 0.5);
+    }
+    // ---- công trình đặt trên đáy (cạnh đáy trùng mặt đất): chỉ có áp lực nước phía trên đè xuống, ngang cân bằng
+    for (double yb : {0.0, -0.3}) { // trùng đáy, hoặc vẽ cắm xuống dưới đáy
+        FluidSolver sv;
+        solve(sectionModel(1, 1e-6, 2, 3, yb, 1.2), sv, yb == 0 ? "công trình đặt trên đáy" : "công trình cắm xuống dưới đáy");
+        const FluidForces F = sv.forces();
+        near("trên đáy: Fy = −ρ·g·(mặt thoáng − đỉnh)·rộng", F.Fy, -rho * g * (2 - 1.2) * 1, 2e-3);
+        near("trên đáy: Fx = 0", F.Fx, 0, 0, 1e-3 * rho * g);
+        check(sv.mesh().sideFaces[(int)FluidSide::Inner] > 0, "trên đáy: có biên trong (mặt công trình)", 0, 0);
+        near("trên đáy: L tham chiếu = chiều cao công trình", sv.Lref(), 1.2, 1e-9);
+        double area = 0;
+        for (double v : sv.mesh().vol) area += v;
+        near("trên đáy: diện tích miền = miền − phần công trình trên đáy", area, 2 * 6 - 1 * 1.2, 1e-9);
+    }
+    // ---- có dòng chảy: mặt cắt đứng (đáy cứng, mặt thoáng trượt) — lực cản dương, công trình bị đẩy theo dòng
+    {
+        FluidSolver sv;
+        check(solve(sectionModel(1, 0.05, 2, 3, 0, 1.2), sv, "dòng chảy qua công trình trên đáy"), "hội tụ", 0, 0);
+        check(sv.forces().Fd > 0, "lực cản theo hướng dòng chảy > 0", sv.forces().Fd, 0);
+        check(sv.params().bc[(int)FluidSide::Bottom].kind == FluidBcKind::Wall &&
+                  sv.params().bc[(int)FluidSide::Top].kind == FluidBcKind::Symmetry,
+              "mặt cắt đứng: đáy cứng, mặt thoáng trượt", 0, 0);
+    }
+    // ---- mặt bằng: mỏ hàn chạm bờ, hai bờ cứng; không có thủy tĩnh
+    {
+        FluidSolver sv;
+        check(solve(sectionModel(0, 0.05, 2, 2.4, -0.2, 0.8), sv, "mỏ hàn chạm bờ (mặt bằng)"), "hội tụ", 0, 0);
+        check(sv.params().hydroG == 0 && sv.params().bc[(int)FluidSide::Top].kind == FluidBcKind::Wall, "mặt bằng: hai bờ cứng, không thủy tĩnh", 0, 0);
+    }
+    // ---- vật cản chắn ngang toàn bộ dòng chảy; mặt cắt đứng với dòng chảy thẳng đứng
+    {
+        Model mesh;
+        FluidParams p;
+        check(!buildFlowProblem(sectionModel(1, 1, 2, 3, -0.5, 2.5), mesh, p).empty(), "báo lỗi: vật cản chắn kín dòng chảy", 0, 0);
+        Model m = sectionModel(1, 1, 2, 3, 0.5, 1);
+        m.flow.bx = 2, m.flow.by = 0; // cửa vào nằm ngang → dòng chảy thẳng đứng (ống đứng): hai biên bên là thành
+        m.nodes.clear();
+        m.elements.clear();
+        check(buildFlowProblem(m, mesh, p).empty() && p.bc[(int)FluidSide::Bottom].kind == FluidBcKind::Wall &&
+                  p.bc[(int)FluidSide::Top].kind == FluidBcKind::Wall,
+              "mặt cắt đứng, dòng chảy thẳng đứng: hai biên bên là thành", 0, 0);
+    }
+    // ---- ghi / đọc
+    {
+        Model m = sectionModel(1, 1, 2, 3, 0, 1), r;
+        m.flow.topWall = true;
+        m.flow.hydrostatic = false;
+        std::string err;
+        check(modelFromText(modelToText(m), r, err) && r.flow.section == 1 && r.flow.topWall && !r.flow.hydrostatic,
+              "ghi/đọc loại mặt cắt", 0, 0);
+    }
+}
+
+// ---------------------------------------------------------------- chảy rối k-ε, mặt cắt nghiêng, mặt thoáng VOF
+static void testTurbulenceFreeSurface() {
+    std::printf("Chảy rối k-ε, mặt cắt đứng nghiêng, mặt thoáng tự do (VOF)\n");
+    // ---- dòng chảy rối phát triển đầy đủ trong kênh phẳng 2h = 0,2 m, Re = 10⁵: hệ số ma sát theo Dean C_f = 0,073·Re^−0,25
+    {
+        Model m;
+        m.materials.push_back(Material{});
+        ChannelSpec s;
+        s.obstacle = 0;
+        s.L = 6;
+        s.H = 0.2;
+        s.h = 0.02;
+        meshChannel(m, s, 0);
+        FluidParams p;
+        p.rho = 1000;
+        p.mu = 1e-3;
+        p.turbulence = TurbModel::KEpsilon;
+        p.scheme = ConvScheme::Upwind;
+        p.tol = 1e-5;
+        p.bc[(int)FluidSide::Left] = {FluidBcKind::Inlet, 0.5, 0, false};
+        p.bc[(int)FluidSide::Right] = {FluidBcKind::Outlet};
+        FluidSolver sv;
+        check(sv.init(m, p), "khởi tạo kênh chảy rối", 0, 0);
+        check(solveSteady(sv), "kênh chảy rối hội tụ", sv.iteration(), 0);
+        double u, v, p1, p2, uc;
+        sv.probe(4.2, 0.1, u, v, p1);
+        sv.probe(5.4, 0.1, uc, v, p2);
+        const double tau = -(p2 - p1) / 1.2 * 0.1, Cf = tau / (0.5 * 1000 * 0.25);
+        near("k-ε: hệ số ma sát kênh (Dean)", Cf, 0.073 * std::pow(1e5, -0.25), 0.08);
+        near("k-ε: vận tốc tâm / trung bình (≈ 1,12)", uc / 0.5, 1.12, 0.05);
+        double mutMax = 0;
+        for (double x : sv.turbVisc()) mutMax = std::max(mutMax, x);
+        check(mutMax > 10 * p.mu, "k-ε: độ nhớt rối ≫ độ nhớt phân tử", mutMax / p.mu, 10);
+    }
+    // ---- vật cản trong dòng nước Re ≈ 10⁶ (trước đây chảy tầng phân kỳ): k-ε dừng hội tụ, Cd của trụ vuông ≈ 2
+    {
+        Model m = sectionModel(0, 1, 4, 5, 2.5, 3.5), mesh;
+        m.flow.by = 6;
+        m.flow.length = 16;
+        m.flow.mu = 1.002e-3;
+        m.flow.h = 0;
+        m.flow.hFar = 0;
+        FluidParams p;
+        std::string note;
+        check(buildFlowProblem(m, mesh, p, &note).empty(), "lập bài toán Re lớn", 0, 0);
+        check(p.turbulence == TurbModel::KEpsilon && !p.transient, "Re lớn: tự chọn k-ε, bài toán dừng", 0, 0);
+        FluidSolver sv;
+        sv.init(mesh, p);
+        check(solveSteady(sv, 3000), "k-ε quanh trụ vuông hội tụ", sv.iteration(), 0);
+        const double Cd = sv.forces().Cd;
+        check(Cd > 1.7 && Cd < 2.7, "k-ε: Cd trụ vuông (thực nghiệm 2,1–2,2)", Cd, 2.15);
+    }
+    // ---- mặt cắt đứng nghiêng (kênh dốc 10°): đáy là cạnh thấp hơn, mặt thoáng trượt
+    {
+        Model m = sectionModel(1, 0.05, 2, 3, 0, 1), mesh;
+        const double a = 10 * M_PI / 180, c = std::cos(a), s = std::sin(a);
+        auto rot = [&](double& x, double& y) {
+            const double X = c * x + s * y, Y = -s * x + c * y; // quay −10°: dòng chảy đi xuống dốc
+            x = X, y = Y;
+        };
+        rot(m.flow.ax, m.flow.ay);
+        rot(m.flow.bx, m.flow.by);
+        for (auto& n : m.nodes) rot(n.x, n.y);
+        FluidParams p;
+        check(buildFlowProblem(m, mesh, p).empty(), "mặt cắt đứng nghiêng 10°", 0, 0);
+        check(p.bc[(int)FluidSide::Bottom].kind == FluidBcKind::Wall && p.bc[(int)FluidSide::Top].kind == FluidBcKind::Symmetry,
+              "nghiêng: đáy cứng, mặt thoáng trượt", 0, 0);
+        double cc[4][2];
+        m.flow.corners(cc);
+        near("nghiêng: mặt thoáng thủy tĩnh tại góc hạ lưu cạnh trên", p.yFree, cc[2][1], 1e-12);
+        FluidSolver sv;
+        check(sv.init(mesh, p) && solveSteady(sv, 3000), "nghiêng: hội tụ", 0, 0);
+    }
+    // ---- VOF: nước tĩnh trong bể 1×1 m, mực 0,5 m — không có dòng giả, áp suất đáy ρ·g·h, thể tích bảo toàn
+    FluidParams vp;
+    vp.rho = 998.2;
+    vp.mu = 1.002e-3;
+    vp.vof = true;
+    vp.dt = 0.01;
+    vp.bc[(int)FluidSide::Left] = {FluidBcKind::Wall};
+    vp.bc[(int)FluidSide::Right] = {FluidBcKind::Wall};
+    vp.bc[(int)FluidSide::Bottom] = {FluidBcKind::Wall};
+    vp.bc[(int)FluidSide::Top] = {FluidBcKind::Opening};
+    {
+        Model m;
+        m.materials.push_back(Material{});
+        ChannelSpec s;
+        s.obstacle = 0;
+        s.L = s.H = 1;
+        s.h = 0.04;
+        meshChannel(m, s, 0);
+        FluidParams p = vp;
+        p.initLevel = 0.5;
+        FluidSolver sv;
+        check(sv.init(m, p), "khởi tạo bể nước tĩnh", 0, 0);
+        const double V0 = sv.waterVolume();
+        near("VOF: thể tích nước ban đầu", V0, 0.5, 1e-9);
+        while (sv.time() < 1.0)
+            if (!sv.step()) break;
+        double umax = 0;
+        for (int c = 0; c < sv.mesh().nCells; ++c) umax = std::max(umax, std::hypot(sv.u()[c], sv.v()[c]));
+        check(umax < 0.02, "VOF nước tĩnh: dòng giả < 2 cm/s", umax, 0.02);
+        double u, v, pb;
+        sv.probe(0.5, 0.02, u, v, pb);
+        near("VOF nước tĩnh: áp suất đáy ρ·g·h", pb, 998.2 * 9.81 * 0.48, 0.01);
+        near("VOF: bảo toàn thể tích nước", sv.waterVolume(), V0, 1e-6);
+    }
+    // ---- vỡ đập Martin & Moyce (1952): cột nước a × 2a đổ ra lòng bể; mép sóng Z = x/a theo T = t·√(2g/a).
+    // Thí nghiệm Z(2) ≈ 2,33; các lời giải VOF công bố ≈ 2,5–2,7 (thí nghiệm trễ do nhấc cửa).
+    {
+        const double a = 0.146;
+        Model m;
+        m.materials.push_back(Material{});
+        ChannelSpec s;
+        s.obstacle = 0;
+        s.L = 4 * a;
+        s.H = 2.4 * a;
+        s.h = a / 16;
+        meshChannel(m, s, 0);
+        FluidParams p = vp;
+        p.initLevel = 2 * a;
+        p.initGate = a;
+        FluidSolver sv;
+        sv.init(m, p);
+        const double V0 = sv.waterVolume();
+        double Z1 = 0, Z2 = 0;
+        while (Z2 == 0 && sv.step()) {
+            const double T = sv.time() * std::sqrt(2 * 9.81 / a);
+            if (T < 1 && T + sv.dt() * std::sqrt(2 * 9.81 / a) < 1) continue;
+            double xf = 0;
+            for (int c = 0; c < sv.mesh().nCells; ++c)
+                if (sv.mesh().cy[c] < a / 8 && sv.alpha()[c] > 0.5) xf = std::max(xf, sv.mesh().cx[c]);
+            if (T >= 1 && Z1 == 0) Z1 = xf / a;
+            if (T >= 2) Z2 = xf / a;
+        }
+        check(Z2 > 2.3 && Z2 < 2.95, "vỡ đập: mép sóng Z tại T = 2", Z2, 2.6);
+        check(Z1 > 1.2 && Z1 < Z2, "vỡ đập: mép sóng tiến dần", Z1, 1.5);
+        near("vỡ đập: bảo toàn thể tích nước", sv.waterVolume(), V0, 1e-6);
+    }
+    // ---- mặt thoáng tự do khai báo trong mô hình: nước chảy qua vật cản ngập, biên trên thông khí
+    {
+        Model m = sectionModel(1, 0.3, 2, 2.3, 0, 0.3), mesh;
+        m.flow.freeSurface = true;
+        m.flow.waterDepth = 1.0;
+        m.flow.h = 0.08;
+        m.flow.hFar = 0.15;
+        FluidParams p;
+        check(buildFlowProblem(m, mesh, p).empty(), "lập bài toán mặt thoáng tự do", 0, 0);
+        check(p.vof && p.transient && p.bc[(int)FluidSide::Top].kind == FluidBcKind::Opening, "mặt thoáng: VOF, biên trên thông khí", 0, 0);
+        near("mặt thoáng: cao độ mặt nước cửa vào", p.inletLevel, 1.0, 1e-12);
+        FluidSolver sv;
+        check(sv.init(mesh, p), "khởi tạo mặt thoáng", 0, 0);
+        bool ok = true;
+        for (int i = 0; i < 30 && ok; ++i) ok = sv.step();
+        check(ok && !sv.diverged(), "mặt thoáng: chạy 30 bước không phân kỳ", sv.iteration(), 30);
+        Model bad = sectionModel(1, 0.3, 2, 2.3, 0, 0.3);
+        bad.flow.freeSurface = true;
+        bad.flow.waterDepth = 3; // sâu hơn chiều cao AB
+        check(!buildFlowProblem(bad, mesh, p).empty(), "báo lỗi: độ sâu nước vượt chiều cao miền", 0, 0);
+    }
+    // ---- ghi / đọc
+    {
+        Model m = sectionModel(1, 1, 2, 3, 0, 1), r;
+        m.flow.turbulence = 2;
+        m.flow.freeSurface = true;
+        m.flow.waterDepth = 1.2;
+        m.flow.gate = 0.7;
+        std::string err;
+        check(modelFromText(modelToText(m), r, err) && r.flow.turbulence == 2 && r.flow.freeSurface &&
+                  std::abs(r.flow.waterDepth - 1.2) < 1e-12 && std::abs(r.flow.gate - 0.7) < 1e-12,
+              "ghi/đọc mô hình rối, mặt thoáng", 0, 0);
+    }
+}
+
 int main() {
+    testFluid();
+    testFlowDomain();
+    testFlowSections();
+    testTurbulenceFreeSurface();
     testDxfReport();
     testDesign();
     testDynamics();

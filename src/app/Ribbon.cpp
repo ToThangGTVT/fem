@@ -57,7 +57,7 @@ enum class Icon {
     Line, Truss, Node, Mesh, FrameGen, TrussGen, Erase, Move, Copy, Rotate, Mirror, Divide, Merge, Fix, Pin, Roller,
     RollerX, Free, NLoad, DLoad, PLoad, MLoad, Temp, Settle, SelfW, Case, Combo, Run, Buckle, Modal, Influence, Schema,
     Deformed, DiagN, DiagQ, DiagM, Sigma, Contour, Envelope, Report, ZoomExt, Dist, Id, List, Props, New, Open, Save,
-    Undo, Redo, Sun, Moon, Help
+    Undo, Redo, Sun, Moon, Help, Flow
 };
 
 struct IconColors {
@@ -381,6 +381,21 @@ void drawIcon(ImDrawList* dl, Icon ic, ImVec2 c, float s, const IconColors& k) {
     case Icon::Sun: drawSvgIcon(dl, SvgIconId::Sun, c, s, k.orange); break;
     case Icon::Moon: drawSvgIcon(dl, SvgIconId::Moon, c, s, k.fg); break;
     case Icon::Help: text("?", 0, 0, k.blue, 0.9f); break;
+    case Icon::Flow: {
+        // đường dòng vòng qua trụ tròn
+        dl->AddCircleFilled(P(0, 0), 0.3f * h, k.dim);
+        for (float y0 : {-0.75f, -0.4f, 0.4f, 0.75f}) {
+            std::vector<ImVec2> pts;
+            for (int i = 0; i <= 16; ++i) {
+                const float x = -0.95f + 1.9f * i / 16;
+                const float bump = (y0 > 0 ? 1 : -1) * (0.62f - std::abs(y0) * 0.55f) * std::exp(-x * x * 5);
+                pts.push_back(P(x, y0 + bump));
+            }
+            dl->AddPolyline(pts.data(), (int)pts.size(), std::abs(y0) < 0.5f ? k.blue : k.fg, 0, th);
+        }
+        arrowHead(dl, P(0.95f, -0.75f), ImVec2(1, 0), 0.3f * h, k.fg);
+        break;
+    }
     }
 }
 
@@ -765,6 +780,42 @@ void App::ribbon() {
         endPanel("Gối tựa");
 
         beginPanel();
+        if (bigButton("Dòng\nchảy", Icon::Flow,
+                      "DONGCHAY: chọn mặt bằng / mặt cắt đứng, vẽ cạnh cửa vào AB, nhấp phía chảy (chiều dài), rồi nhập vận tốc, "
+                      "chất lỏng. Vẽ vật cản bằng L (khép kín bằng C), bấm Tính (F5).",
+                      model.flow.active))
+            ImGui::OpenPopup("##flowsection");
+        if (ImGui::BeginPopup("##flowsection")) {
+            ImGui::TextDisabled("Chọn loại mặt cắt, rồi vẽ cạnh cửa vào AB");
+            ImGui::Separator();
+            if (ImGui::MenuItem("Mặt bằng")) {
+                flowSectionNext = 0;
+                run("DONGCHAY");
+            }
+            ImGui::TextDisabled("   Nhìn từ trên xuống: dòng quanh trụ cầu, mố, kè; hai biên bên là bờ.");
+            if (ImGui::MenuItem("Mặt cắt đứng")) {
+                flowSectionNext = 1;
+                run("DONGCHAY");
+            }
+            ImGui::TextDisabled("   Theo phương thẳng đứng, có trọng lực: biên dưới là mặt đất / đáy,");
+            ImGui::TextDisabled("   biên trên là mặt thoáng; công trình được phép đặt trên mặt đất.");
+            ImGui::EndPopup();
+        }
+        beginColumn();
+        ImGui::BeginDisabled(!model.flow.active);
+        if (smallButton("Sửa dòng chảy", Icon::Props, "Sửa vận tốc, chất lỏng, lưới... (hoặc bỏ chọn rồi sửa trong bảng Thuộc tính)"))
+            editFlow();
+        if (smallButton("Xóa dòng chảy", Icon::Erase, "Bỏ khai báo dòng chảy (giữ các đường vẽ vật cản)")) {
+            snapshot();
+            model.flow.active = false;
+            changed();
+        }
+        ImGui::EndDisabled();
+        if (smallButton("Vật cản (L)", Icon::Line, "Vẽ vật cản: đường khép kín bằng lệnh L, gõ C để khép")) run("L");
+        endColumn();
+        endPanel("Chất lỏng");
+
+        beginPanel();
         {
             std::vector<std::string> mats, secs;
             for (auto& m : model.materials) mats.push_back(m.name);
@@ -905,6 +956,11 @@ void App::ribbon() {
         if (bigButton("Động\nlực học", Icon::Deformed, "Phổ phản ứng TCVN 9386, dao động cưỡng bức, theo thời gian (lệnh DONGLUC)"))
             startCommand("DONGLUC");
         endPanel("Trị riêng & động lực");
+        beginPanel();
+        if (bigButton("Dòng chảy\n(FVM)", Icon::Flow, "Mô phỏng chất lỏng không nén: Navier–Stokes 2D, thể tích hữu hạn (lệnh CHATLONG)",
+                      showFluid))
+            startCommand("CHATLONG");
+        endPanel("Chất lỏng");
         beginPanel();
         if (bigButton("Đường ảnh\nhưởng", Icon::Influence, "Thiết lập trong panel Kết quả", view == ResultView::Influence)) {
             view = ResultView::Influence;
@@ -1083,6 +1139,7 @@ void App::ribbon() {
         beginColumn();
         small("Động lực học", Icon::Deformed, GuideTopic::Dynamics);
         small("Đường ảnh hưởng", Icon::Influence, GuideTopic::Influence);
+        small("Dòng chảy (FVM)", Icon::Flow, GuideTopic::Fluid);
         endColumn();
         endPanel("Phân tích");
         beginPanel();
@@ -1153,7 +1210,19 @@ void App::statusBar() {
         // bên phải: trạng thái tính toán
         std::string st;
         ImU32 col = ui.textDim;
-        if (!result.ok && !result.error.empty()) {
+        if (showFluid || model.flow.active) {
+            if (fluidShown()) {
+                const auto& H = fluid->history();
+                if (fluid->params().transient) std::snprintf(b, sizeof b, "Chất lỏng: t = %.3f s", fluid->time());
+                else std::snprintf(b, sizeof b, "Chất lỏng: vòng lặp %d%s", fluid->iteration(), fluid->converged() ? ", hội tụ" : "");
+                st = b;
+                if (!H.empty()) {
+                    std::snprintf(b, sizeof b, ", dư %.1e", std::max({H.back().resU, H.back().resV, H.back().resC}));
+                    st += b;
+                }
+                if (fluidRun) st += " ▸";
+            } else st = model.flow.active ? "Dòng chảy: bấm Tính (F5)" : "Chất lỏng: chưa khởi tạo";
+        } else if (!result.ok && !result.error.empty()) {
             st = "Lỗi tính toán";
             col = rgb(230, 70, 60);
         } else if (needAnalyze && !autoAnalyze) {
@@ -1299,6 +1368,16 @@ void App::startCommand(const std::string& raw) {
         return;
     }
     if (is({"TINH", "RUN", "CALC"})) {
+        if (model.flow.active) {
+            // có khai báo dòng chảy: tạo lưới quanh vật cản, giải và hiện kết quả trực tiếp
+            showFluid = true;
+            if (fluidInit()) {
+                fluidRun = true;
+                echo("Đang tính dòng chảy: " + std::to_string(fluid->mesh().nCells) + " ô.");
+            } else echo("Lỗi: không tính được dòng chảy (xem thông báo ở trên).");
+            analyzeNow();
+            return;
+        }
         analyzeNow(true);
         if (result.ok)
             echo("Tính xong: " + std::to_string(result.numEquations) + " phương trình, " +
@@ -1369,6 +1448,15 @@ void App::startCommand(const std::string& raw) {
     }
     if (is({"DONGLUC", "DYNAMICS", "PHOPU"})) {
         showDynamics = true;
+        return;
+    }
+    if (is({"SUADONGCHAY", "FLOWEDIT"})) {
+        if (model.flow.active) editFlow();
+        else echo("Chưa khai báo dòng chảy: dùng lệnh DONGCHAY.");
+        return;
+    }
+    if (is({"CHATLONG", "FLUID", "CFD", "FVM"})) {
+        showFluid = true;
         return;
     }
     if (is({"PPL", "FORCEMETHOD"})) {

@@ -153,8 +153,45 @@ struct Combo {
     bool generated = false;                    // được sinh tự động (sẽ bị thay khi sinh lại)
 };
 
+// Dòng chảy chất lỏng: miền chữ nhật dựng trên cạnh cửa vào AB, chảy vuông góc với AB, dài L. Vật cản là các
+// đường khép kín (thanh) vẽ bên trong miền. Đơn vị SI: m/s, kg/m³, Pa·s.
+struct FlowDomain {
+    bool active = false;
+    // 0: mặt bằng (nhìn từ trên xuống, hai biên bên là bờ); 1: mặt cắt đứng (biên dưới là mặt đất / đáy, biên trên là
+    // mặt thoáng hoặc trần, có trọng lực)
+    int section = 0;
+    double ax = 0, ay = 0, bx = 0, by = 1; // cạnh cửa vào A → B
+    double length = 5;      // chiều dài miền theo hướng chảy (m)
+    int side = -1;          // +1: chảy về phía bên trái của A→B, −1: bên phải
+    double U = 1;           // vận tốc trung bình ở cửa vào (m/s)
+    bool parabolic = false; // phân bố parabol (vận tốc lớn nhất 1,5·U) thay vì đều
+    int medium = 0;         // 0 nước, 1 không khí, 2 dầu, 3 glyxerin, 4 tùy chọn
+    double rho = 998.2, mu = 1.002e-3;
+    bool slipWalls = false; // mặt bằng: hai bờ trượt (dòng tự do) thay vì thành cứng
+    bool topWall = false;   // mặt cắt đứng: biên trên là trần cứng (cống, ống) thay vì mặt thoáng / không khí tự do
+    bool hydrostatic = true; // mặt cắt đứng: cộng áp suất thủy tĩnh ρ·g·(y_mặt thoáng − y) vào áp suất và lực
+    double h = 0, hFar = 0; // kích thước ô sát vật cản / xa nhất (m); 0: tự chọn
+    bool transient = false;
+    double dt = 0.01, endTime = 5;
+    int turbulence = 0;          // 0: tự động (k-ε khi Re > 2300), 1: chảy tầng, 2: chảy rối k-ε
+    double turbIntensity = 0.05; // cường độ rối ở cửa vào
+    // mặt cắt đứng có mặt thoáng tự do (hai pha nước – không khí, VOF): AB gồm cả lớp không khí phía trên mặt nước
+    bool freeSurface = false;
+    double waterDepth = 0;  // độ sâu nước ở cửa vào, đo từ đáy dọc AB (m)
+    double initDepth = -1;  // độ sâu nước ban đầu trong miền (m); < 0: bằng waterDepth
+    double gate = 0;        // nước ban đầu chỉ trong đoạn dài này từ cửa vào (vỡ đập, xả cửa cống); 0: toàn miền
+
+    double width() const;
+    void direction(double& nx, double& ny) const; // hướng chảy (véc tơ đơn vị)
+    void corners(double c[4][2]) const;           // A, B, B + L·n, A + L·n
+    // mặt cắt đứng: đầu A hay B của cửa vào nằm ở đáy (cạnh bên thấp hơn); cao độ mặt nước ở độ sâu depth đo dọc AB
+    bool groundAtB() const;
+    double waterLevelY(double depth) const;
+};
+
 struct Model {
     std::string title;
+    FlowDomain flow;
     PlaneMode planeMode = PlaneMode::Stress;
     bool secondOrder = false; // tính theo sơ đồ biến dạng (P-Δ, phân tích bậc hai)
     std::vector<Node> nodes;

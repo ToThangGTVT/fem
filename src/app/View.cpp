@@ -7,6 +7,7 @@
 #include "App.h"
 #include "core/Elements.h"
 #include "core/Mesher.h"
+#include "core/Fluid.h"
 #include "core/PlaneElements.h"
 
 using namespace fem;
@@ -159,7 +160,306 @@ struct Interaction {
     ImVec2 start{0, 0};
 } g_in;
 
+// ---------------------------------------------------------------- dòng chảy chất lỏng
+struct FluidDrawCache {
+    int serial = -1, iter = -1, field = -1;
+    std::vector<double> cell, node;
+    std::vector<double> aCell, aNode; // VOF: α tại ô, tại nút (đường mặt nước)
+    double vmin = 0, vmax = 1;
+} g_fc;
+
+// Màu theo đại lượng: α (tỉ lệ nước) dùng thang không khí → nước; các đại lượng khác dùng thang cầu vồng
+ImU32 fluidColor(const App& a, double t) {
+    if (a.fluidField != (int)FluidField::Alpha) return colormapU32(t);
+    t = std::clamp(t, 0.0, 1.0);
+    const float air[3] = {a.darkTheme ? 52.f : 232.f, a.darkTheme ? 58.f : 238.f, a.darkTheme ? 70.f : 244.f};
+    const float wat[3] = {25, 105, 215};
+    return IM_COL32((int)(air[0] + (wat[0] - air[0]) * t), (int)(air[1] + (wat[1] - air[1]) * t),
+                    (int)(air[2] + (wat[2] - air[2]) * t), 255);
+}
+
+// Cắt đa giác lồi bởi nửa mặt phẳng a·x + b·y ≤ c
+std::vector<std::array<double, 2>> clipPoly(const std::vector<std::array<double, 2>>& P, double a, double b, double c) {
+    std::vector<std::array<double, 2>> r;
+    for (size_t i = 0; i < P.size(); ++i) {
+        const auto& p = P[i];
+        const auto& q = P[(i + 1) % P.size()];
+        const double fp = a * p[0] + b * p[1] - c, fq = a * q[0] + b * q[1] - c;
+        if (fp <= 0) r.push_back(p);
+        if ((fp < 0) != (fq < 0) && fp != fq) {
+            const double t = fp / (fp - fq);
+            r.push_back({p[0] + t * (q[0] - p[0]), p[1] + t * (q[1] - p[1])});
+        }
+    }
+    return r;
+}
+
+void updateFluidCache(const App& a) {
+    const FluidSolver& S = *a.fluid;
+    if (g_fc.serial == a.fluidSerial && g_fc.iter == S.iteration() && g_fc.field == a.fluidField) return;
+    g_fc.serial = a.fluidSerial;
+    g_fc.iter = S.iteration();
+    g_fc.field = a.fluidField;
+    const FluidField f = (FluidField)a.fluidField;
+    g_fc.cell = S.cellField(f);
+    g_fc.node = S.nodeField(f, (int)S.mesh().px.size());
+    if (S.params().vof) {
+        g_fc.aCell = S.cellField(FluidField::Alpha);
+        g_fc.aNode = S.nodeField(FluidField::Alpha, (int)S.mesh().px.size());
+    } else {
+        g_fc.aCell.clear();
+        g_fc.aNode.clear();
+    }
+    if (f == FluidField::Alpha) {
+        g_fc.vmin = 0;
+        g_fc.vmax = 1;
+        return;
+    }
+    if (f == FluidField::Vorticity) {
+        // xoáy rất lớn trong lớp biên sát thành: lấy thang đối xứng theo phân vị 90% của |ω|
+        std::vector<double> m;
+        for (double v : g_fc.cell) m.push_back(std::abs(v));
+        double q = 0;
+        if (!m.empty()) {
+            const size_t k = (size_t)(0.90 * (m.size() - 1));
+            std::nth_element(m.begin(), m.begin() + k, m.end());
+            q = m[k];
+        }
+        g_fc.vmin = -std::max(q, 1e-12);
+        g_fc.vmax = std::max(q, 1e-12);
+        return;
+    }
+    g_fc.vmin = DBL_MAX;
+    g_fc.vmax = -DBL_MAX;
+    for (const auto* v : {&g_fc.cell, &g_fc.node})
+        for (double x : *v)
+            if (std::isfinite(x)) {
+                g_fc.vmin = std::min(g_fc.vmin, x);
+                g_fc.vmax = std::max(g_fc.vmax, x);
+            }
+    if (g_fc.vmin > g_fc.vmax) g_fc.vmin = 0, g_fc.vmax = 1;
+    if (g_fc.vmax - g_fc.vmin < 1e-12 * std::max(1.0, std::abs(g_fc.vmax))) {
+        g_fc.vmax += 1e-9;
+        g_fc.vmin -= 1e-9;
+    }
+}
+
+// Biên miền tính tô theo loại điều kiện biên
+void drawFluidBoundary(const App& a, ImDrawList* dl, const FluidMesh& M, const FluidParams& prm) {
+    for (int f = M.nInternal; f < M.nFaces; ++f) {
+        const FluidBcKind k = prm.bc[M.side[f]].kind;
+        const ImVec2 pa = a.cam.toScreen(M.px[M.fa[f]], M.py[M.fa[f]]), pb = a.cam.toScreen(M.px[M.fb[f]], M.py[M.fb[f]]);
+        dl->AddLine(pa, pb, fluidBcColor(k), k == FluidBcKind::Wall ? 2.0f : 3.0f);
+        if (k == FluidBcKind::Inlet || k == FluidBcKind::MovingWall) {
+            // mũi tên nhỏ chỉ hướng vận tốc trên mặt
+            const FluidBc& b = prm.bc[M.side[f]];
+            const double U = std::hypot(b.u, b.v);
+            if (U <= 0 || len(pb - pa) < 14) continue;
+            const ImVec2 m = (pa + pb) * 0.5f, d(float(b.u / U), float(-b.v / U));
+            arrow(dl, m, m + d * 12.0f, withAlpha(fluidBcColor(k), 220), 1.4f, 6);
+        }
+    }
+}
+
+void drawFluid(App& a, ImDrawList* dl) {
+    const FluidSolver& S = *a.fluid;
+    const FluidMesh& M = S.mesh();
+    const Camera& cam = a.cam;
+    updateFluidCache(a);
+    const double span = g_fc.vmax - g_fc.vmin;
+    auto col = [&](double v) { return fluidColor(a, (v - g_fc.vmin) / span); };
+    const ImVec2 uvw = ImGui::GetFontTexUvWhitePixel();
+    const ImVec2 c0 = cam.c0, c1 = cam.c1;
+    std::vector<ImVec2> sp(M.px.size());
+    std::vector<char> done(M.px.size(), 0);
+    auto scr = [&](int n) {
+        if (!done[n]) {
+            sp[n] = cam.toScreen(M.px[n], M.py[n]);
+            done[n] = 1;
+        }
+        return sp[n];
+    };
+    // ---- tô màu: quạt tam giác từ tâm ô (giá trị tại tâm) tới các nút (giá trị nội suy về nút)
+    for (int c = 0; c < M.nCells; ++c) {
+        const int s0 = M.cellStart[c], n = M.cellStart[c + 1] - s0;
+        ImVec2 lo(FLT_MAX, FLT_MAX), hi(-FLT_MAX, -FLT_MAX);
+        for (int k = 0; k < n; ++k) {
+            const ImVec2 p = scr(M.cellNodes[s0 + k]);
+            lo = ImVec2(std::min(lo.x, p.x), std::min(lo.y, p.y));
+            hi = ImVec2(std::max(hi.x, p.x), std::max(hi.y, p.y));
+        }
+        if (hi.x < c0.x || lo.x > c1.x || hi.y < c0.y || lo.y > c1.y) continue;
+        const ImU32 cc = col(g_fc.cell[c]);
+        const ImVec2 pc = cam.toScreen(M.cx[c], M.cy[c]);
+        for (int k = 0; k < n; ++k) {
+            const int na = M.cellNodes[s0 + k], nb = M.cellNodes[s0 + (k + 1) % n];
+            const double va = g_fc.node[na], vb = g_fc.node[nb];
+            dl->PrimReserve(3, 3);
+            dl->PrimVtx(pc, uvw, cc);
+            dl->PrimVtx(scr(na), uvw, std::isfinite(va) ? col(va) : cc);
+            dl->PrimVtx(scr(nb), uvw, std::isfinite(vb) ? col(vb) : cc);
+        }
+    }
+    if (a.fluidMeshLines)
+        for (int f = 0; f < M.nInternal; ++f) dl->AddLine(scr(M.fa[f]), scr(M.fb[f]), withAlpha(P.planeEdge, 70), 1.0f);
+    // ---- VOF: đường mặt nước α = 0,5 (đường đồng mức trên các tam giác quạt tâm ô – nút)
+    if (!g_fc.aCell.empty()) {
+        const ImU32 lc = a.darkTheme ? IM_COL32(255, 255, 255, 230) : IM_COL32(10, 40, 110, 230);
+        for (int c = 0; c < M.nCells; ++c) {
+            const int s0 = M.cellStart[c], n = M.cellStart[c + 1] - s0;
+            const ImVec2 pc = cam.toScreen(M.cx[c], M.cy[c]);
+            const double vc = g_fc.aCell[c] - 0.5;
+            for (int k = 0; k < n; ++k) {
+                const int na = M.cellNodes[s0 + k], nb = M.cellNodes[s0 + (k + 1) % n];
+                const ImVec2 P3[3] = {pc, scr(na), scr(nb)};
+                const double v3[3] = {vc, std::isfinite(g_fc.aNode[na]) ? g_fc.aNode[na] - 0.5 : vc,
+                                      std::isfinite(g_fc.aNode[nb]) ? g_fc.aNode[nb] - 0.5 : vc};
+                ImVec2 pts[2];
+                int np = 0;
+                for (int e = 0; e < 3 && np < 2; ++e) {
+                    const double v0 = v3[e], v1 = v3[(e + 1) % 3];
+                    if ((v0 < 0) != (v1 < 0)) {
+                        const float t = (float)(v0 / (v0 - v1));
+                        pts[np++] = P3[e] + (P3[(e + 1) % 3] - P3[e]) * t;
+                    }
+                }
+                if (np == 2) dl->AddLine(pts[0], pts[1], lc, 2.0f);
+            }
+        }
+    }
+
+    const ImU32 ink = a.darkTheme ? IM_COL32(255, 255, 255, 255) : IM_COL32(15, 20, 30, 255);
+    // ---- đường dòng (tính lại tối đa 2 lần/giây khi đang chạy)
+    if (a.fluidStreams) {
+        const double t = ImGui::GetTime();
+        if (a.fluidLinesSerial != a.fluidSerial ||
+            (a.fluidLinesIter != S.iteration() && (!a.fluidRun || t - a.fluidLinesClock > 0.5))) {
+            a.fluidLines = S.streamlines(S.defaultSeeds(28));
+            a.fluidLinesSerial = a.fluidSerial;
+            a.fluidLinesIter = S.iteration();
+            a.fluidLinesClock = t;
+        }
+        std::vector<ImVec2> pts;
+        for (const auto& line : a.fluidLines) {
+            pts.clear();
+            for (const auto& q : line) pts.push_back(cam.toScreen(q[0], q[1]));
+            dl->AddPolyline(pts.data(), (int)pts.size(), withAlpha(ink, 150), 0, 1.2f);
+        }
+    }
+    // ---- véc tơ vận tốc: mỗi ô lưới màn hình 26 px một mũi tên
+    if (a.fluidVectors) {
+        const float cell = 26;
+        const int gx = std::max(1, (int)((c1.x - c0.x) / cell) + 1), gy = std::max(1, (int)((c1.y - c0.y) / cell) + 1);
+        std::vector<int> pick((size_t)gx * gy, -1);
+        double umax = 0;
+        for (int c = 0; c < M.nCells; ++c) umax = std::max(umax, std::hypot(S.u()[c], S.v()[c]));
+        if (umax > 0) {
+            for (int c = 0; c < M.nCells; ++c) {
+                const ImVec2 p = cam.toScreen(M.cx[c], M.cy[c]);
+                if (p.x < c0.x || p.x >= c1.x || p.y < c0.y || p.y >= c1.y) continue;
+                const int ix = (int)((p.x - c0.x) / cell), iy = (int)((p.y - c0.y) / cell);
+                int& k = pick[(size_t)iy * gx + ix];
+                // ưu tiên ô gần tâm ô lưới màn hình nhất
+                const ImVec2 mid(c0.x + (ix + 0.5f) * cell, c0.y + (iy + 0.5f) * cell);
+                if (k < 0 || len(p - mid) < len(cam.toScreen(M.cx[k], M.cy[k]) - mid)) k = c;
+            }
+            for (int c : pick) {
+                if (c < 0) continue;
+                const double u = S.u()[c], v = S.v()[c], sp2 = std::hypot(u, v);
+                const float L = (float)(0.85 * cell * sp2 / umax);
+                if (L < 2.5f) continue;
+                const ImVec2 p = cam.toScreen(M.cx[c], M.cy[c]), d((float)(u / sp2), (float)(-v / sp2));
+                arrow(dl, p - d * (L * 0.5f), p + d * (L * 0.5f), withAlpha(ink, 210), 1.1f, std::min(6.0f, 2 + L * 0.35f));
+            }
+        }
+    }
+    drawFluidBoundary(a, dl, M, S.params());
+}
+
 } // namespace
+
+void drawFlowDomain(const App& a, ImDrawList* dl, const FlowDomain& f, bool preview) {
+    double c[4][2], nx, ny;
+    f.corners(c);
+    f.direction(nx, ny);
+    ImVec2 q[4];
+    for (int i = 0; i < 4; ++i) q[i] = a.cam.toScreen(c[i][0], c[i][1]);
+    // nền nhạt (đa giác lồi; thứ tự đỉnh có thể thuận chiều kim đồng hồ trên màn hình)
+    const bool vof = f.section == 1 && f.freeSurface && f.waterDepth > 0;
+    const ImU32 fill = IM_COL32(60, 150, 255, preview ? 25 : vof ? 14 : 38);
+    dl->AddTriangleFilled(q[0], q[1], q[2], fill);
+    dl->AddTriangleFilled(q[0], q[2], q[3], fill);
+    if (vof) {
+        // vùng nước ban đầu: dưới mực nước ban đầu, trong đoạn cửa đập (nếu có)
+        std::vector<std::array<double, 2>> W;
+        for (auto& cc : c) W.push_back({cc[0], cc[1]});
+        const double level = f.waterLevelY(f.initDepth >= 0 ? f.initDepth : f.waterDepth);
+        W = clipPoly(W, 0, 1, level);
+        if (f.gate > 0) W = clipPoly(W, nx, ny, nx * f.ax + ny * f.ay + f.gate);
+        std::vector<ImVec2> sp;
+        for (auto& w : W) sp.push_back(a.cam.toScreen(w[0], w[1]));
+        if (sp.size() >= 3) dl->AddConvexPolyFilled(sp.data(), (int)sp.size(), IM_COL32(40, 120, 230, 80));
+        // mực nước ở cửa vào ▽
+        const double ly = f.waterLevelY(f.waterDepth);
+        const bool gB = f.groundAtB();
+        const double gx = gB ? f.bx : f.ax, gy = gB ? f.by : f.ay, tx = gB ? f.ax : f.bx, ty = gB ? f.ay : f.by;
+        const double t = std::abs(ty - gy) > 1e-12 ? (ly - gy) / (ty - gy) : 0;
+        const ImVec2 lp = a.cam.toScreen(gx + t * (tx - gx), ly);
+        dl->AddTriangleFilled(lp + ImVec2(-6, -10), lp + ImVec2(6, -10), lp, IM_COL32(40, 120, 230, 255));
+    }
+    const ImU32 inlet = fluidBcColor(FluidBcKind::Inlet), outlet = fluidBcColor(FluidBcKind::Outlet);
+    if (f.section == 0) {
+        const ImU32 wall = fluidBcColor(f.slipWalls ? FluidBcKind::Symmetry : FluidBcKind::Wall);
+        dl->AddLine(q[1], q[2], wall, 2.0f);
+        dl->AddLine(q[3], q[0], wall, 2.0f);
+    } else {
+        // mặt cắt đứng: biên thấp hơn là mặt đất (gạch chéo), biên kia là mặt thoáng (nét đứt) hoặc trần cứng
+        const bool firstLow = c[1][1] + c[2][1] < c[3][1] + c[0][1];
+        const ImVec2 g0 = firstLow ? q[1] : q[3], g1 = firstLow ? q[2] : q[0];
+        const ImVec2 t0 = firstLow ? q[3] : q[1], t1 = firstLow ? q[0] : q[2];
+        const ImU32 ground = IM_COL32(170, 140, 100, 255);
+        dl->AddLine(g0, g1, ground, 2.5f);
+        const float gl = len(g1 - g0);
+        const ImVec2 gd = norm(g1 - g0);
+        for (float t = 4; t < gl; t += 10) {
+            const ImVec2 p = g0 + gd * t;
+            dl->AddLine(p, p + ImVec2(-6, 8), withAlpha(ground, 200), 1.2f);
+        }
+        if (f.topWall) dl->AddLine(t0, t1, fluidBcColor(FluidBcKind::Wall), 2.0f);
+        else {
+            const float tl = len(t1 - t0);
+            const ImVec2 td = norm(t1 - t0);
+            for (float t = 0; t < tl; t += 12) dl->AddLine(t0 + td * t, t0 + td * std::min(t + 7, tl), fluidBcColor(FluidBcKind::Symmetry), 2.0f);
+        }
+        if (!preview) {
+            label(dl, (g0 + g1) * 0.5f + ImVec2(0, 16), "mặt đất / đáy", ground, ImVec2(0.5f, 0.5f), 0.85f);
+            label(dl, (t0 + t1) * 0.5f - ImVec2(0, 12), f.topWall ? "trần cứng" : "mặt thoáng ▽", fluidBcColor(FluidBcKind::Symmetry),
+                  ImVec2(0.5f, 0.5f), 0.85f);
+        }
+    }
+    dl->AddLine(q[2], q[3], outlet, 2.5f);
+    dl->AddLine(q[0], q[1], inlet, 3.0f);
+    // mũi tên vận tốc dọc cửa vào (dài hơn ở giữa nếu phân bố parabol)
+    const ImVec2 d((float)nx, (float)-ny);
+    const float W = len(q[1] - q[0]);
+    const int n = std::clamp((int)(W / 28), 2, 24);
+    for (int i = 0; i < n; ++i) {
+        const float t = (i + 0.5f) / n;
+        const float k = f.parabolic ? 4 * t * (1 - t) : 1.0f;
+        const ImVec2 p = q[0] + (q[1] - q[0]) * t;
+        arrow(dl, p, p + d * (8 + 22 * k), withAlpha(inlet, 220), 1.4f, 7);
+    }
+    if (!preview) {
+        char b[64];
+        std::snprintf(b, sizeof b, "U = %.3g m/s", f.U);
+        label(dl, (q[0] + q[1]) * 0.5f - d * 16.0f, b, inlet, ImVec2(0.5f, 0.5f), 0.9f);
+        label(dl, (q[2] + q[3]) * 0.5f + d * 14.0f, "cửa ra", outlet, ImVec2(0.5f, 0.5f), 0.85f);
+    } else {
+        char b[64];
+        std::snprintf(b, sizeof b, "L = %.4g m, rộng %.4g m", f.length, f.width());
+        label(dl, (q[2] + q[3]) * 0.5f + d * 14.0f, b, a.pal.text, ImVec2(0.5f, 0.5f), 0.9f);
+    }
+}
 
 const char* contourFieldName(ContourField f, bool axisym) {
     g_axisym = axisym;
@@ -257,7 +557,8 @@ void App::viewport() {
     };
 
     // ---- phần tử phẳng: tô màu hoặc nền
-    const bool contourOn = showRes && view == ResultView::Contour && m.hasPlane();
+    const bool fluidOn = fluidShown();
+    const bool contourOn = showRes && view == ResultView::Contour && m.hasPlane() && !fluidOn;
     double cmin = 0, cmax = 0;
     if (contourOn) {
         cmin = DBL_MAX;
@@ -279,7 +580,7 @@ void App::viewport() {
         }
     }
     const ImVec2 uvw = ImGui::GetFontTexUvWhitePixel();
-    for (size_t e = 0; e < m.elements.size(); ++e) {
+    for (size_t e = 0; e < m.elements.size() && !fluidOn; ++e) {
         const Element& el = m.elements[e];
         if (!el.isPlane()) continue;
         const int nc = el.nodeCount();
@@ -335,6 +636,10 @@ void App::viewport() {
             dl->AddPolyline(ol, no, withAlpha(P.planeEdge, drawDeformed ? 110 : 255), 1.0f, ImDrawFlags_Closed);
         }
     }
+    // dòng chảy chất lỏng: trường màu, đường dòng, véc tơ; khi chưa tính chỉ tô biên theo điều kiện biên
+    if (fluidOn) drawFluid(*this, dl);
+    else if (m.flow.active) drawFlowDomain(*this, dl, m.flow, false);
+    else if (showFluid && fluidMeshError.empty() && currentFluidMesh().nCells > 0) drawFluidBoundary(*this, dl, fluidMesh, fluidP);
     // trục đối xứng (bài toán đối xứng trục: r = x, trục z ≡ x = 0)
     if (m.planeMode == PlaneMode::Axisymmetric && m.hasPlane()) {
         const ImVec2 a = cam.toScreen(0, 0);
@@ -1432,23 +1737,34 @@ void App::viewport() {
     }
 
     // ---- chú giải phổ màu
-    if (contourOn) {
+    if (contourOn || fluidOn) {
+        const char* title = fluidOn ? fluidFieldName((FluidField)fluidField)
+                                    : contourFieldName(contour, m.planeMode == PlaneMode::Axisymmetric);
+        const double lmin = fluidOn ? g_fc.vmin : cmin, lmax = fluidOn ? g_fc.vmax : cmax;
         const float bw = 18, bh = std::min(260.0f, sz.y - 60);
         const ImVec2 o(cam.c1.x - 120, cam.c0.y + 34);
-        label(dl, o + ImVec2(bw, -8), contourFieldName(contour, m.planeMode == PlaneMode::Axisymmetric), P.text, ImVec2(0.5f, 1), 0.9f);
+        label(dl, o + ImVec2(bw, -8), title, P.text, ImVec2(0.5f, 1), 0.9f);
         const int nb = 64;
         for (int i = 0; i < nb; ++i) {
             const float y0 = o.y + bh * i / nb, y1 = o.y + bh * (i + 1) / nb;
-            dl->AddRectFilled(ImVec2(o.x, y0), ImVec2(o.x + bw, y1 + 0.5f), colormapU32(1.0 - (i + 0.5) / nb));
+            dl->AddRectFilled(ImVec2(o.x, y0), ImVec2(o.x + bw, y1 + 0.5f),
+                              fluidOn ? fluidColor(*this, 1.0 - (i + 0.5) / nb) : colormapU32(1.0 - (i + 0.5) / nb));
         }
         dl->AddRect(o, o + ImVec2(bw, bh), P.textDim);
         const int nt = 8;
         for (int i = 0; i <= nt; ++i) {
-            const double v = cmax - (cmax - cmin) * i / nt;
+            const double v = lmax - (lmax - lmin) * i / nt;
             const float y = o.y + bh * i / nt;
             dl->AddLine(ImVec2(o.x + bw, y), ImVec2(o.x + bw + 4, y), P.textDim);
             label(dl, ImVec2(o.x + bw + 7, y), fmtVal(v), P.text, ImVec2(0, 0.5f), 0.85f);
         }
+    }
+    if (fluidOn) {
+        const FluidSolver& S = *fluid;
+        char b[128];
+        if (S.params().transient) std::snprintf(b, sizeof b, "Dòng chảy  t = %.3f s   Re = %.4g", S.time(), S.reynolds());
+        else std::snprintf(b, sizeof b, "Dòng chảy  vòng lặp %d%s   Re = %.4g", S.iteration(), S.converged() ? " (hội tụ)" : "", S.reynolds());
+        label(dl, ImVec2(cam.c0.x + 10, cam.c0.y + 12), b, P.text, ImVec2(0, 0.5f), 0.9f);
     }
 
     // ---- biểu tượng UCS (góc trái dưới)
@@ -1463,7 +1779,7 @@ void App::viewport() {
         dl->AddText(o + ImVec2(-4, -66), P.axisY, "Y");
     }
     if (!fmTitle.empty()) label(dl, ImVec2(cam.c0.x + 10, cam.c0.y + 30), fmTitle, P.select, ImVec2(0, 0.5f));
-    if (!result.ok && !result.error.empty())
+    if (!result.ok && !result.error.empty() && !showFluid)
         label(dl, ImVec2(cam.c0.x + 10, cam.c0.y + 12), "⚠ " + result.error, IM_COL32(230, 60, 50, 255), ImVec2(0, 0.5f), 0.9f);
     else if (needAnalyze && !autoAnalyze)
         label(dl, ImVec2(cam.c0.x + 10, cam.c0.y + 12), "Mô hình đã thay đổi — nhấn F5 để tính lại", IM_COL32(220, 140, 0, 255),
@@ -1476,8 +1792,18 @@ void App::viewport() {
     dl->PopClipRect();
 
     // ---- chú thích khi rê chuột
+    double fwx = 0, fwy = 0, fu = 0, fv = 0, fp = 0;
+    if (fluidOn) cam.toWorld(mp, fwx, fwy);
     if (hovered && !cmd && !g_in.boxing && !ImGui::IsMouseDragging(ImGuiMouseButton_Right)) {
-        if (hoverNode >= 0) {
+        if (fluidOn && fluid->probe(fwx, fwy, fu, fv, fp)) {
+            const double q = 0.5 * fluid->params().rho * fluid->Uref() * fluid->Uref();
+            ImGui::BeginTooltip();
+            ImGui::Text("(%.4f; %.4f) m", fwx, fwy);
+            ImGui::Text("u = %.5g, v = %.5g, |u| = %.5g m/s", fu, fv, std::hypot(fu, fv));
+            ImGui::Text("p = %.5g Pa, Cp = %.4f", fp, q > 0 ? fp / q : 0.0);
+            if (fluid->params().hydroG > 0) ImGui::Text("p toàn phần (gồm thủy tĩnh) = %.5g Pa", fp + fluid->hydrostatic(fwy));
+            ImGui::EndTooltip();
+        } else if (hoverNode >= 0) {
             ImGui::BeginTooltip();
             const Node& n = m.nodes[hoverNode];
             ImGui::Text("Nút %d  (%.3f; %.3f)", hoverNode + 1, n.x, n.y);

@@ -78,6 +78,19 @@ std::string modelToText(const Model& m) {
     o << "TITLE " << quote(m.title) << "\n";
     o << "PLANE " << (m.planeMode == PlaneMode::Stress ? "STRESS" : m.planeMode == PlaneMode::Strain ? "STRAIN" : "AXISYM") << "\n";
     if (m.secondOrder) o << "ANALYSIS PDELTA 1\n";
+    if (m.flow.active) {
+        const FlowDomain& f = m.flow;
+        o << "# FLOW xA yA xB yB L chiều U parabol môi_trường rho mu biên_trượt h h_xa không_dừng dt t_cuối "
+             "mặt_cắt(0 bằng, 1 đứng) trần_cứng thủy_tĩnh mô_hình_rối(0 tự động, 1 tầng, 2 k-ε) cường_độ_rối "
+             "mặt_thoáng_tự_do độ_sâu_cửa_vào độ_sâu_ban_đầu đoạn_vỡ_đập\n";
+        o << "FLOW " << num(f.ax) << " " << num(f.ay) << " " << num(f.bx) << " " << num(f.by) << " " << num(f.length) << " "
+          << f.side << " " << num(f.U) << " " << (f.parabolic ? 1 : 0) << " " << f.medium << " " << num(f.rho) << " "
+          << num(f.mu) << " " << (f.slipWalls ? 1 : 0) << " " << num(f.h) << " " << num(f.hFar) << " "
+          << (f.transient ? 1 : 0) << " " << num(f.dt) << " " << num(f.endTime) << " " << f.section << " "
+          << (f.topWall ? 1 : 0) << " " << (f.hydrostatic ? 1 : 0) << " " << f.turbulence << " " << num(f.turbIntensity)
+          << " " << (f.freeSurface ? 1 : 0) << " " << num(f.waterDepth) << " " << num(f.initDepth) << " " << num(f.gate)
+          << "\n";
+    }
     o << "\n";
     o << "# MATERIAL tên E nu alpha gamma [loại(1 thép, 2 bê tông) f/Rb Rbt (MPa)]\n";
     for (const auto& x : m.materials) {
@@ -192,6 +205,33 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
                           : t[1] == "STRAIN" ? PlaneMode::Strain
                           : t[1] == "AXISYM" ? PlaneMode::Axisymmetric
                                              : PlaneMode::Stress;
+        else if (k == "FLOW") {
+            if (!need(8)) return fail("FLOW thiếu tham số");
+            FlowDomain& f = m.flow;
+            f.active = true;
+            f.ax = d(1), f.ay = d(2), f.bx = d(3), f.by = d(4), f.length = d(5);
+            f.side = d(6) < 0 ? -1 : 1;
+            f.U = d(7);
+            f.parabolic = d(8) != 0;
+            f.medium = (int)d(9, 0);
+            f.rho = d(10, 998.2);
+            f.mu = d(11, 1.002e-3);
+            f.slipWalls = d(12) != 0;
+            f.h = d(13), f.hFar = d(14);
+            f.transient = d(15) != 0;
+            f.dt = d(16, 0.01);
+            f.endTime = d(17, 5);
+            f.section = d(18) != 0 ? 1 : 0;
+            f.topWall = d(19) != 0;
+            f.hydrostatic = d(20, 1) != 0;
+            f.turbulence = std::clamp((int)d(21, 0), 0, 2);
+            f.turbIntensity = d(22, 0.05);
+            f.freeSurface = d(23) != 0;
+            f.waterDepth = d(24);
+            f.initDepth = d(25, -1);
+            f.gate = d(26);
+            if (f.width() <= 0 || f.length <= 0) return fail("FLOW: kích thước miền chảy phải > 0");
+        }
         else if (k == "ANALYSIS") {
             if (t.size() > 2 && t[1] == "PDELTA") m.secondOrder = d(2) != 0;
         }

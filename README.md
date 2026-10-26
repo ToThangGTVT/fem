@@ -26,6 +26,8 @@ Giao diện kiểu AutoCAD (ribbon, dòng lệnh, thanh trạng thái), hai ch�
 | Dầm-tường (балка-стенка): phổ màu σx, phần tử Q4 | Phổ phản ứng TCVN 9386: phổ thiết kế, khối lượng hữu hiệu, nội lực SRSS |
 | ![Kiểm tra thiết kế BTCT](docs/images/kiem_tra_thiet_ke.png) | ![Bể nước tròn, bài toán đối xứng trục](docs/images/be_nuoc_doi_xung_truc.png) |
 | Kiểm tra thiết kế: cốt thép dầm, cột theo TCVN 5574:2018, tô màu trên sơ đồ | Bể nước tròn đối xứng trục, phần tử Q8: ứng suất vòng σθ do áp lực nước |
+| ![Dòng xoáy Kármán sau trụ tròn](docs/images/dong_chay_karman.png) | ![Hộp kín nắp trượt](docs/images/dong_chay_hop_kin.png) |
+| Dòng chảy FVM: dòng xoáy Kármán sau trụ tròn, Re = 100 (phổ màu xoáy ω, đường dòng) | Hộp kín nắp trượt Re = 100: vận tốc, đường dòng, véc tơ, giao diện sáng |
 
 ## Tải về
 
@@ -140,6 +142,30 @@ có lỗ → A, trọng tâm, Jx, Jy, Jxy, mômen quán tính chính và góc tr
 thanh tại điểm nối chữ T) và xuất sơ đồ, biểu đồ nội lực, giá trị, hình biến dạng ra DXF R12 theo các lớp riêng
 (`FEM_THANH`, `FEM_BIEUDO_DUONG`, `FEM_BIEUDO_AM`, `FEM_GIATRI`...). Lệnh `DXFIN`, `DXFOUT`.
 
+**Dòng chảy chất lỏng — phương pháp thể tích hữu hạn**:
+- Khai báo ở thẻ Trang chủ › Dòng chảy (lệnh `DONGCHAY`): chọn **mặt bằng** (hai biên bên là bờ) hoặc **mặt cắt đứng**
+  (đáy / mặt đất, dòng chảy được phép dốc; mặt thoáng phẳng, mặt thoáng tự do hoặc trần cứng; áp suất thủy tĩnh và lực
+  đẩy nổi), vẽ cạnh cửa vào AB (bề rộng hoặc chiều cao
+  = AB, chảy vuông góc với AB), nhấp chiều dài miền, nhập vận tốc, chất lỏng trong cửa sổ khai báo. Vẽ vật cản hình dạng
+  bất kỳ bằng lệnh `L` (đường khép kín, được phép chạm / cắm qua biên: nhà trên mặt đất, trụ trên đáy sông), bấm Tính
+  (F5): lưới tam giác Delaunay ràng buộc (làm mịn Ruppert) bám theo đường viền vật cản.
+  Khai báo được lưu trong file `.fem`, sửa trong bảng Thuộc tính.
+- Cửa sổ kết quả và bài toán mẫu: lệnh `CHATLONG`, thẻ Phân tích › Chất lỏng.
+- Chảy rối: mô hình k-ε chuẩn với hàm tường, sinh rối Kato–Launder (tự bật khi Re > 2300); kiểm chứng ma sát kênh theo
+  công thức Dean (sai 3%), trụ vuông Re ≈ 10⁶ có Cd ≈ 2.
+- Mặt thoáng tự do (mặt cắt đứng): hai pha nước – không khí VOF, sơ đồ nén HRIC, dạng cân bằng lực (không dòng giả); nước
+  dâng, sóng, dòng qua đập tràn, vỡ đập (kiểm chứng Martin & Moyce, bảo toàn thể tích nước).
+- Navier–Stokes không nén 2D; lưới phi cấu trúc lấy từ các phần tử phẳng của mô hình (T3, Q4, T6, Q8),
+  ẩn số tại tâm ô; SIMPLE với nội suy Rhie–Chow (hiệu chỉnh Majumdar, Choi: nghiệm không phụ thuộc α, Δt), gradient
+  bình phương tối thiểu, hiệu chỉnh không trực giao và độ lệch của lưới tam giác; đối lưu ngược dòng bậc 1 / tuyến tính bậc 2.
+- Dừng hoặc không dừng (Euler ẩn, BDF2); chạy trực tiếp, kết quả cập nhật ngay trên sơ đồ.
+- Điều kiện biên: thành cứng, thành di động, cửa vào (đều / parabol), cửa ra p = 0, đối xứng; nhận biên theo hình học
+  (bốn cạnh hình chữ nhật bao và biên trong là vật cản).
+- Tạo lưới kênh có trụ tròn (lưới O) hoặc vật cản chữ nhật (bậc, mặt cắt công trình), hoặc dùng lưới bất kỳ (Lưới phẳng, DXF).
+- Kết quả: phổ màu |u|, u, v, p, Cp, xoáy ω; véc tơ, đường dòng; lực lên vật cản (N/m), Cd, Cl, số Strouhal, Cp quanh vật cản.
+- Kiểm chứng: Poiseuille (dp/dx hội tụ bậc hai trên tứ giác và tam giác), hộp kín nắp trượt Re = 100 (Ghia, Botella),
+  trụ tròn Schäfer–Turek 2D-1 (Cd = 5,53 so với 5,58) và 2D-2 (St ≈ 0,29 so với 0,30).
+
 **Báo cáo HTML có hình** (lệnh `BAOCAO`): sơ đồ, dữ liệu, biểu đồ M, Q, N, hình biến dạng (SVG), bảng phản lực,
 chuyển vị, nội lực; mở bằng trình duyệt và in ra PDF.
 
@@ -175,6 +201,8 @@ Gõ lệnh ở bất cứ đâu, không cần nhấp vào dòng lệnh. **Enter 
 | `DXFIN`, `DXFOUT`, `BAOCAO` | nhập/xuất DXF, báo cáo HTML |
 | `KTTK`, `COC` | kiểm tra thiết kế, tạo cọc chịu tải ngang |
 | `ONDINH`, `DAODONG`, `DONGLUC` | ổn định, dao động riêng, động lực học |
+| `DONGCHAY` | khai báo dòng chảy: cạnh cửa vào AB, chiều dài; vật cản vẽ bằng `L`, rồi `TINH` (F5) |
+| `CHATLONG` (`CFD`) | cửa sổ dòng chảy chất lỏng: kết quả, bài toán mẫu |
 | `TIETDIEN`, `USTD` | thiết kế tiết diện, ứng suất trên tiết diện |
 | `PPL`, `PPCV`, `VOM`, `VUT` | phương pháp lực, phương pháp chuyển vị ma trận, tạo vòm, thanh vút |
 | `DI`, `ID`, `LI`, `Z` | đo khoảng cách, tọa độ, liệt kê, zoom (`E` toàn bộ, `W` cửa sổ) |

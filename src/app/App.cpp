@@ -153,6 +153,10 @@ const LoadSetResult* App::currentSet() const {
 void App::analyzeNow(bool explicitRun) {
     clampIndices();
     result = analyze(model);
+    // mô hình chỉ có dòng chảy (vật cản vẽ bằng thanh, không có gối): không phải lỗi kết cấu
+    if (!result.ok && model.flow.active &&
+        std::all_of(model.supports.begin(), model.supports.end(), [](const Support& s) { return s.empty(); }))
+        result.error.clear();
     resultValid = result.ok;
     ++resultVersion;
     needAnalyze = false;
@@ -446,7 +450,8 @@ void App::shortcuts() {
         if (openGuides.count((int)GuideTopic::Start)) openGuides.erase((int)GuideTopic::Start);
         else openGuide(GuideTopic::Start);
     }
-    if (Shortcut(ImGuiKey_F5, g)) {
+    if (Shortcut(ImGuiKey_F5, g) && model.flow.active) startCommand("TINH");
+    else if (Shortcut(ImGuiKey_F5, g)) {
         analyzeNow(true);
         if (result.ok)
             addLog("Tính xong: " + std::to_string(result.numEquations) + " phương trình, " +
@@ -487,6 +492,8 @@ void App::frame() {
     if (showDesign) designDialog();
     else util.clear();
     if (showPileGen) pileDialog();
+    if (showFluid) fluidDialog();
+    flowPopup();
     if (showDemo) ImGui::ShowDemoWindow(&showDemo);
     savePrompt();
     clampIndices();

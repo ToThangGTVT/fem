@@ -798,6 +798,15 @@ void App::propsPanel() {
                 if (ImGui::Selectable(secs[i].c_str(), i == curSec)) curSec = i;
             ImGui::EndCombo();
         }
+        if (m.flow.active) {
+            ImGui::SeparatorText("Dòng chảy");
+            flowFields(m.flow, true);
+            if (ImGui::Button("Xóa dòng chảy")) {
+                snapshot();
+                m.flow.active = false;
+                changed();
+            }
+        }
         ImGui::End();
         return;
     }

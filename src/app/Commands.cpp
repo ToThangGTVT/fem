@@ -187,6 +187,103 @@ struct LineCmd : Command {
     }
 };
 
+// ---------------------------------------------------------------- khai báo dòng chảy: cạnh cửa vào AB, chiều dài L
+struct FlowCmd : Command {
+    int stage = -1; // −1: chọn loại mặt cắt; 0, 1: điểm A, B của cửa vào; 2: chiều dài
+    int section = 0;
+    double ax = 0, ay = 0, bx = 0, by = 0;
+    int side = -1; // phía chảy theo vị trí con trỏ
+    FlowCmd() { name = "DÒNG CHẢY"; }
+    void start(App& a) override {
+        if (a.flowSectionNext >= 0) {
+            section = a.flowSectionNext;
+            stage = 0;
+        } else if (a.model.flow.active)
+            section = a.model.flow.section;
+        a.flowSectionNext = -1;
+    }
+    void onEnter(App&) override {
+        if (stage == -1) stage = 0; // giữ loại mặt cắt mặc định
+        else done = true;
+    }
+    bool wantsPoint() const override { return true; }
+    bool base(double& x, double& y) const override {
+        if (stage == 0) return false;
+        x = stage == 1 ? ax : bx;
+        y = stage == 1 ? ay : by;
+        return true;
+    }
+    std::string prompt(App&) override {
+        if (stage == -1)
+            return section == 0 ? "Loại mặt cắt [Mặt bằng(B)/Mặt cắt đứng(D)] <Mặt bằng>:"
+                                : "Loại mặt cắt [Mặt bằng(B)/Mặt cắt đứng(D)] <Mặt cắt đứng>:";
+        if (stage == 0)
+            return section == 0 ? "Mặt bằng — điểm đầu A của cạnh cửa vào:"
+                                : "Mặt cắt đứng — điểm A của cửa vào (ở đáy / mặt đất):";
+        if (stage == 1)
+            return section == 0 ? "Điểm cuối B của cạnh cửa vào (bề rộng dòng chảy = AB):"
+                                : "Điểm B của cửa vào (ở mặt thoáng, thẳng đứng trên A; độ sâu = AB):";
+        return "Chiều dài miền chảy (nhấp về phía dòng chảy, hoặc gõ số m):";
+    }
+    // khoảng cách có dấu từ điểm tới đường AB, dương ở bên trái A→B
+    double offset(double x, double y) const {
+        const double w = std::hypot(bx - ax, by - ay);
+        return ((bx - ax) * (y - ay) - (by - ay) * (x - ax)) / w;
+    }
+    void finish(App& a, double L) {
+        FlowDomain f = a.model.flow.active ? a.model.flow : FlowDomain{};
+        f.ax = ax, f.ay = ay, f.bx = bx, f.by = by;
+        f.length = L;
+        f.side = side;
+        f.section = section;
+        a.flowDraft = f;
+        a.flowPopupRequest = true;
+        done = true;
+    }
+    void onPoint(App& a, const SnapPoint& p) override {
+        if (stage == -1) stage = 0; // nhấp điểm ngay: dùng loại mặt cắt mặc định
+        if (stage == 0) {
+            ax = p.x, ay = p.y;
+            stage = 1;
+        } else if (stage == 1) {
+            if (std::hypot(p.x - ax, p.y - ay) < tolOf(a.model)) return;
+            bx = p.x, by = p.y;
+            stage = 2;
+        } else {
+            const double d = offset(p.x, p.y);
+            if (std::abs(d) < tolOf(a.model)) return;
+            side = d > 0 ? 1 : -1;
+            finish(a, std::abs(d));
+        }
+    }
+    bool onText(App& a, const std::string& s) override {
+        if (stage == -1) {
+            const std::string u = upper(s);
+            if (u == "B" || u == "MB") section = 0;
+            else if (u == "D" || u == "MD" || u == "CD") section = 1;
+            else return false;
+            stage = 0;
+            return true;
+        }
+        double L;
+        if (stage != 2 || !number(s, L) || L <= 0) return false;
+        finish(a, L);
+        return true;
+    }
+    void preview(App& a, ImDrawList* dl, const SnapPoint& c) override {
+        if (stage == 1) dl->AddLine(a.cam.toScreen(ax, ay), a.cam.toScreen(c.x, c.y), fluidBcColor(FluidBcKind::Inlet), 3.0f);
+        if (stage != 2) return;
+        const double d = offset(c.x, c.y);
+        if (std::abs(d) > 0) side = d > 0 ? 1 : -1;
+        FlowDomain f;
+        f.ax = ax, f.ay = ay, f.bx = bx, f.by = by;
+        f.side = side;
+        f.section = section;
+        f.length = std::max(std::abs(d), 1e-9);
+        drawFlowDomain(a, dl, f, true);
+    }
+};
+
 struct NodeCmd : Command {
     NodeCmd() { name = "NÚT"; }
     bool wantsPoint() const override { return true; }
@@ -857,6 +954,7 @@ std::unique_ptr<Command> makeCommand(const std::string& u, std::string& canonica
         return false;
     };
     if (is({"L", "LINE", "THANH", "TK"})) return std::make_unique<LineCmd>(false);
+    if (is({"DONGCHAY", "FLOW"})) return std::make_unique<FlowCmd>();
     if (is({"TRUSS", "DAN", "TD"})) return std::make_unique<LineCmd>(true);
     if (is({"PO", "POINT", "NODE", "NUT"})) return std::make_unique<NodeCmd>();
     if (is({"E", "ERASE", "XOA"})) return std::make_unique<EraseCmd>();
@@ -901,6 +999,8 @@ std::vector<std::pair<std::string, std::string>> commandHelp() {
         {"PPL / PPCV", "phương pháp lực từng bước, Maxwell–Mohr / phương pháp chuyển vị dạng ma trận"},
         {"VOM / VUT", "tạo vòm / thanh vút (tiết diện thay đổi)"},
         {"DONGLUC", "động lực học: phổ phản ứng TCVN 9386, cưỡng bức điều hòa, Newmark"},
+        {"DONGCHAY", "khai báo dòng chảy: mặt bằng / mặt cắt đứng, cạnh cửa vào AB, chiều dài; vật cản vẽ bằng L, rồi TINH"},
+        {"CHATLONG, CFD", "cửa sổ dòng chảy chất lỏng: kết quả, bài toán mẫu (Navier–Stokes, thể tích hữu hạn)"},
         {"DXFIN / DXFOUT / BAOCAO", "nhập, xuất bản vẽ DXF / báo cáo HTML có hình"},
         {"KTTK / COC", "kiểm tra thiết kế thép, BTCT, độ võng / tạo cọc chịu tải ngang (phương pháp m)"},
         {"ONDINH / DAODONG", "ổn định / dao động riêng"},

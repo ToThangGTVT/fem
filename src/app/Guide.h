@@ -5,7 +5,7 @@ enum class GuideTopic {
     Start, Draw, Commands, Keys, Conventions,
     FrameGen, TrussGen, ArchGen, MeshGen, PileGen, MatSec, Supports, Bars,
     Loads, Combos,
-    Static, Kinematics, ForceMethod, MatrixMethod, Buckling, Vibration, Dynamics, Influence,
+    Static, Kinematics, ForceMethod, MatrixMethod, Buckling, Vibration, Dynamics, Influence, Fluid,
     Results, Design, SectionStress, Export,
     Count
 };
