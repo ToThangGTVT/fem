@@ -42,15 +42,32 @@ else()
   target_compile_options(femcore PRIVATE -Wall -Wextra)
 endif()
 
+# ---------------------------------------------------------------- giao diện C (JSON) cho ứng dụng di động
+add_library(femcapi STATIC
+  src/capi/Json.cpp
+  src/capi/ModelJson.cpp
+  src/capi/fem_capi.cpp
+)
+target_link_libraries(femcapi PUBLIC femcore)
+if(MSVC)
+  target_compile_options(femcapi PRIVATE /W4 /utf-8)
+else()
+  target_compile_options(femcapi PRIVATE -Wall -Wextra)
+endif()
+
 # ---------------------------------------------------------------- kiểm tra
 if(FEM_BUILD_TESTS)
   enable_testing()
   add_executable(fem_tests tests/test_core.cpp)
   target_link_libraries(fem_tests PRIVATE femcore)
+  add_executable(fem_capi_tests tests/test_capi.cpp)
+  target_link_libraries(fem_capi_tests PRIVATE femcapi)
   if(MSVC)
     target_compile_options(fem_tests PRIVATE /utf-8)
+    target_compile_options(fem_capi_tests PRIVATE /utf-8)
   endif()
   add_test(NAME core COMMAND fem_tests)
+  add_test(NAME capi COMMAND fem_capi_tests)
 endif()
 
 # ---------------------------------------------------------------- giao diện
