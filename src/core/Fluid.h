@@ -25,13 +25,19 @@ namespace fem {
 // Các đoạn biên được nhận diện theo hình học: bốn cạnh của hình chữ nhật bao miền tính và biên trong
 // (vật cản, bậc, lỗ — mọi cạnh biên không nằm trên hình chữ nhật bao).
 enum class FluidSide { Left = 0, Right, Bottom, Top, Inner, Count };
-// Opening: biên thông khí (áp suất toàn phần p = 0, chất lỏng / không khí ra vào tự do) — biên trên của miền có mặt thoáng.
-enum class FluidBcKind { Wall, MovingWall, Inlet, Outlet, Symmetry, Opening };
+// Opening: biên thông khí (áp suất khí quyển: p = 0 ở cao độ cao nhất của biên thông khí, tăng theo cột không khí ρ₂·g·Δy;
+// chất lỏng / không khí ra vào tự do) — biên trên của miền có mặt thoáng.
+// FreeDrain: đáy thoát tự do (VOF) — như biên thông khí đặt ở đáy: nước tới đáy bao nhiêu thoát hết bấy nhiêu (rơi tự do,
+// không có lực đỡ), không khí ở chỗ đáy khô đứng yên; được tính vào lượng nước thoát qua đáy.
+enum class FluidBcKind { Wall, MovingWall, Inlet, Outlet, Symmetry, Opening, FreeDrain };
 
 struct FluidBc {
     FluidBcKind kind = FluidBcKind::Wall;
     double u = 0, v = 0;     // vận tốc (m/s): thành di động, cửa vào (cực đại nếu phân bố parabol)
     bool parabolic = false;  // cửa vào: phân bố parabol 4s(1 − s) dọc đoạn biên
+    // thành cứng thấm nước (mặt đất, đáy): vận tốc thoát pháp tuyến ra khỏi miền (m/s), VOF: nhân α của ô (chỉ nước thoát);
+    // thành phần tiếp tuyến vẫn bằng 0
+    double drain = 0;
 };
 
 enum class ConvScheme { Upwind, LinearUpwind };
@@ -144,6 +150,7 @@ public:
     const std::vector<double>& turbEps() const { return eps_; }
     const std::vector<double>& turbVisc() const { return mut_; } // độ nhớt rối μt (Pa·s)
     double waterVolume() const;                                  // VOF: Σ α·V (m² cho 1 m bề dày)
+    double drainedVolume() const { return drained_; }            // VOF: nước đã thoát qua thành thấm, đáy thoát tự do (m²)
     double pressureAt(int cell) const;                          // áp suất thực (kể cả phần thủy tĩnh) tại tâm ô
     std::vector<double> cellField(FluidField f) const;
     // nội suy về các nút của mô hình (NaN cho nút không thuộc miền); nút trên thành cứng / cửa vào lấy giá trị biên
@@ -196,6 +203,8 @@ private:
     bool hasOutlet_ = false, converged_ = false, diverged_ = false;
     int iter_ = 0;
     double time_ = 0, Uref_ = 1, Lref_ = 1;
+    double drained_ = 0;
+    double atmTop_ = 0; // VOF: cao độ có áp suất khí quyển p = 0 (đỉnh biên thông khí)
     double sideMin_[(int)FluidSide::Count]{}, sideMax_[(int)FluidSide::Count]{}; // phạm vi đoạn biên (cho parabol)
 
     std::vector<double> u_, v_, p_, F_;         // vận tốc, áp suất tại tâm ô; lưu lượng thể tích qua mặt (m²/s)

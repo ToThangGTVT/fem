@@ -56,6 +56,7 @@ ImU32 fluidBcColor(FluidBcKind k) {
     case FluidBcKind::Outlet: return IM_COL32(240, 80, 70, 255);
     case FluidBcKind::Symmetry: return IM_COL32(80, 200, 120, 255);
     case FluidBcKind::Opening: return IM_COL32(150, 220, 255, 255);
+    case FluidBcKind::FreeDrain: return IM_COL32(205, 150, 75, 255);
     }
     return IM_COL32_WHITE;
 }
@@ -330,6 +331,34 @@ bool App::flowFields(FlowDomain& f, bool inPanel) {
     } else {
         ImGui::SeparatorText("Biên dưới / biên trên");
         note("Biên dưới: mặt đất / đáy sông (thành cứng). Công trình được phép đặt trên hoặc cắm xuống đáy.");
+        bool dr = f.drainGround;
+        if (ImGui::Checkbox("Đáy thấm nước (nước thoát qua mặt đất)", &dr)) instant([&] { f.drainGround = dr; });
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Nước thoát ra khỏi miền qua mặt đất / đáy với tốc độ thấm q (vận tốc tiếp tuyến trên đáy vẫn bằng 0). "
+                              "Có mặt thoáng tự do: chỉ phần đáy ngập nước thoát.");
+        if (f.drainGround) {
+            ImGui::Indent();
+            if (ImGui::RadioButton("Thấm với tốc độ q", f.drainMode == 0)) instant([&] { f.drainMode = 0; });
+            ImGui::SameLine();
+            ImGui::BeginDisabled(!f.freeSurface);
+            if (ImGui::RadioButton("Thoát tự do (không giới hạn)", f.drainMode == 1)) instant([&] { f.drainMode = 1; });
+            ImGui::EndDisabled();
+            if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                ImGui::SetTooltip("Đáy như tấm lưới hở: nước tới đáy bao nhiêu thoát hết bấy nhiêu, rơi tự do theo trọng lực "
+                                  "(không bị hút cưỡng bức). Cần mặt thoáng tự do.");
+            if (f.drainMode == 1 && !f.freeSurface)
+                ImGui::TextColored(ImVec4(0.95f, 0.3f, 0.25f, 1), "Thoát tự do cần Mặt thoáng tự do (VOF).");
+            if (f.drainMode == 0) {
+                ImGui::SetNextItemWidth(80);
+                ImGui::InputDouble("Tốc độ thấm q (m/s)", &f.drainRate, 0, 0, "%.3g");
+                after();
+                f.drainRate = std::max(f.drainRate, 0.0);
+                note("q ≈ hệ số thấm K của đất (thấm thẳng đứng): sỏi ~10⁻², cát thô ~10⁻³, cát mịn ~10⁻⁴ m/s.");
+            } else
+                note("Nước chạm đáy thoát ngay, không có lực đỡ: vũng nước nằm trên đáy sẽ rơi hết xuống. Chỗ đáy khô, "
+                     "không khí đứng yên.");
+            ImGui::Unindent();
+        }
         const int top = f.freeSurface ? 1 : f.topWall ? 2 : 0;
         if (ImGui::RadioButton("Mặt thoáng phẳng (trượt)", top == 0)) instant([&] { f.freeSurface = f.topWall = false; });
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Mặt nước coi như cố định; hoặc không khí tự do phía trên khi tính gió");
@@ -507,13 +536,17 @@ void App::fluidDialog() {
     if (model.flow.active) {
         const FlowDomain& f = model.flow;
         ImGui::SeparatorText("Dòng chảy khai báo");
-        ImGui::TextWrapped("%s: %s %.4g m, dài %.4g m; U = %.4g m/s%s; %s; ρ = %.5g kg/m³, μ = %.4g Pa·s; %s.",
+        ImGui::TextWrapped("%s: %s %.4g m, dài %.4g m; U = %.4g m/s%s; %s%s; ρ = %.5g kg/m³, μ = %.4g Pa·s; %s.",
                            f.section == 0 ? "Mặt bằng" : "Mặt cắt đứng", f.section == 0 ? "rộng" : "cao", f.width(), f.length,
                            f.U, f.parabolic ? " (parabol)" : "",
                            f.section == 0 ? (f.slipWalls ? "bờ trượt" : "bờ cứng")
                            : f.freeSurface ? "mặt thoáng tự do (VOF)"
                            : f.topWall     ? "đáy cứng, trần cứng"
                                            : "đáy cứng, mặt thoáng phẳng",
+                           f.section != 1 || !f.drainGround ? ""
+                           : f.drainMode == 1               ? ", đáy thoát tự do"
+                           : f.drainRate > 0                ? ", đáy thấm nước"
+                                                            : "",
                            f.rho, f.mu, f.turbulence == 1 ? "chảy tầng" : f.turbulence == 2 ? "chảy rối k-ε" : "mô hình tự động");
         if (ImGui::Button("Sửa khai báo...")) editFlow();
         ImGui::SameLine();
@@ -741,6 +774,7 @@ void App::fluidDialog() {
         }
         if (S.params().vof)
             note("Thể tích nước %.5g m² (1 m bề dày); Δt hiện tại %.3g s; đường trắng: mặt nước α = 0,5.", S.waterVolume(), S.dt());
+        if (S.params().vof && S.drainedVolume() > 0) note("Nước đã thoát qua đáy: %.5g m²", S.drainedVolume());
         ImGui::Checkbox("Véc tơ vận tốc", &fluidVectors);
         ImGui::SameLine();
         ImGui::Checkbox("Đường dòng", &fluidStreams);

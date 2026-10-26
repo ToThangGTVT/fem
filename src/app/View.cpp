@@ -244,11 +244,19 @@ void updateFluidCache(const App& a) {
     }
 }
 
+const ImU32 kDrainColor = IM_COL32(205, 150, 75, 255); // mặt đất / đáy thấm nước
+
 // Biên miền tính tô theo loại điều kiện biên
 void drawFluidBoundary(const App& a, ImDrawList* dl, const FluidMesh& M, const FluidParams& prm) {
+    std::vector<std::pair<ImVec2, ImVec2>> drainMarks; // trung điểm, pháp tuyến ra ngoài (màn hình) của mặt thấm
     for (int f = M.nInternal; f < M.nFaces; ++f) {
         const FluidBcKind k = prm.bc[M.side[f]].kind;
         const ImVec2 pa = a.cam.toScreen(M.px[M.fa[f]], M.py[M.fa[f]]), pb = a.cam.toScreen(M.px[M.fb[f]], M.py[M.fb[f]]);
+        if ((k == FluidBcKind::Wall && prm.bc[M.side[f]].drain > 0) || k == FluidBcKind::FreeDrain) {
+            dl->AddLine(pa, pb, kDrainColor, 3.0f);
+            drainMarks.push_back({(pa + pb) * 0.5f, norm(ImVec2((float)M.sx[f], (float)-M.sy[f]))});
+            continue;
+        }
         dl->AddLine(pa, pb, fluidBcColor(k), k == FluidBcKind::Wall ? 2.0f : 3.0f);
         if (k == FluidBcKind::Inlet || k == FluidBcKind::MovingWall) {
             // mũi tên nhỏ chỉ hướng vận tốc trên mặt
@@ -258,6 +266,16 @@ void drawFluidBoundary(const App& a, ImDrawList* dl, const FluidMesh& M, const F
             const ImVec2 m = (pa + pb) * 0.5f, d(float(b.u / U), float(-b.v / U));
             arrow(dl, m, m + d * 12.0f, withAlpha(fluidBcColor(k), 220), 1.4f, 6);
         }
+    }
+    // mũi tên nước thấm ra ngoài, cách đều khoảng 32 px dọc đáy
+    std::sort(drainMarks.begin(), drainMarks.end(), [](const auto& p, const auto& q) {
+        return p.first.x != q.first.x ? p.first.x < q.first.x : p.first.y < q.first.y;
+    });
+    ImVec2 last(-FLT_MAX, -FLT_MAX);
+    for (const auto& [m, d] : drainMarks) {
+        if (last.x != -FLT_MAX && len(m - last) < 32) continue;
+        last = m;
+        arrow(dl, m + d * 2.0f, m + d * 11.0f, withAlpha(kDrainColor, 220), 1.3f, 5);
     }
 }
 
@@ -274,10 +292,19 @@ void drawFluidLegend(const App& a, ImDrawList* dl, const FluidMesh& M, const Flu
         std::string text;
     };
     std::vector<Item> items;
-    bool seen[6] = {};
+    bool seen[7] = {}, seenDrain = false;
     for (int s = 0; s < (int)FluidSide::Count; ++s) {
         const FluidBcKind k = prm.bc[s].kind;
-        if (!M.sideFaces[s] || seen[(int)k]) continue;
+        if (!M.sideFaces[s]) continue;
+        if (k == FluidBcKind::Wall && prm.bc[s].drain > 0) {
+            if (seenDrain) continue;
+            seenDrain = true;
+            char b[64];
+            std::snprintf(b, sizeof b, "Đáy thấm nước (q = %.3g m/s)", prm.bc[s].drain);
+            items.push_back({0, kDrainColor, 3.0f, b});
+            continue;
+        }
+        if (seen[(int)k]) continue;
         seen[(int)k] = true;
         items.push_back({0, fluidBcColor(k), k == FluidBcKind::Wall ? 2.0f : 3.0f, fluidBcName(k)});
     }
@@ -452,6 +479,34 @@ void drawFluid(App& a, ImDrawList* dl) {
     drawFluidLegend(a, dl, M, S.params(), true);
 }
 
+// Gạch chéo phía ngoài đoạn p0–p1 (phía xa điểm trong `inside`), kiểu ký hiệu thành cứng / bờ kè
+void hatchEdge(ImDrawList* dl, ImVec2 p0, ImVec2 p1, ImVec2 inside, ImU32 col) {
+    const float L = len(p1 - p0);
+    if (L < 1) return;
+    const ImVec2 d = norm(p1 - p0);
+    ImVec2 out(-d.y, d.x);
+    const ImVec2 mid = (p0 + p1) * 0.5f;
+    if (out.x * (inside.x - mid.x) + out.y * (inside.y - mid.y) > 0) out = out * -1.0f;
+    const ImVec2 tick = out * 7.0f - d * 6.0f;
+    for (float t = 4; t < L; t += 10) {
+        const ImVec2 p = p0 + d * t;
+        dl->AddLine(p, p + tick, col, 1.2f);
+    }
+}
+
+// Mặt bằng có hai bờ cứng: gạch chéo phía ngoài hai bờ
+void drawBankHatch(const App& a, ImDrawList* dl, const FlowDomain& f) {
+    if (f.section != 0 || f.slipWalls) return;
+    double c[4][2];
+    f.corners(c);
+    ImVec2 q[4];
+    for (int i = 0; i < 4; ++i) q[i] = a.cam.toScreen(c[i][0], c[i][1]);
+    const ImVec2 ctr = (q[0] + q[1] + q[2] + q[3]) * 0.25f;
+    const ImU32 col = withAlpha(fluidBcColor(FluidBcKind::Wall), 200);
+    hatchEdge(dl, q[1], q[2], ctr, col);
+    hatchEdge(dl, q[3], q[0], ctr, col);
+}
+
 } // namespace
 
 void drawFlowDomain(const App& a, ImDrawList* dl, const FlowDomain& f, bool preview) {
@@ -488,18 +543,30 @@ void drawFlowDomain(const App& a, ImDrawList* dl, const FlowDomain& f, bool prev
         const ImU32 wall = fluidBcColor(f.slipWalls ? FluidBcKind::Symmetry : FluidBcKind::Wall);
         dl->AddLine(q[1], q[2], wall, 2.0f);
         dl->AddLine(q[3], q[0], wall, 2.0f);
+        drawBankHatch(a, dl, f);
     } else {
         // mặt cắt đứng: biên thấp hơn là mặt đất (gạch chéo), biên kia là mặt thoáng (nét đứt) hoặc trần cứng
         const bool firstLow = c[1][1] + c[2][1] < c[3][1] + c[0][1];
         const ImVec2 g0 = firstLow ? q[1] : q[3], g1 = firstLow ? q[2] : q[0];
         const ImVec2 t0 = firstLow ? q[3] : q[1], t1 = firstLow ? q[0] : q[2];
-        const ImU32 ground = IM_COL32(170, 140, 100, 255);
-        dl->AddLine(g0, g1, ground, 2.5f);
+        const bool freeDrain = f.drainGround && f.drainMode == 1;
+        const bool drain = freeDrain || (f.drainGround && f.drainRate > 0);
+        const ImU32 ground = drain ? kDrainColor : IM_COL32(170, 140, 100, 255);
         const float gl = len(g1 - g0);
         const ImVec2 gd = norm(g1 - g0);
+        if (freeDrain) // đáy hở: nét đứt
+            for (float t = 0; t < gl; t += 12) dl->AddLine(g0 + gd * t, g0 + gd * std::min(t + 8, gl), ground, 2.5f);
+        else dl->AddLine(g0, g1, ground, 2.5f);
         for (float t = 4; t < gl; t += 10) {
             const ImVec2 p = g0 + gd * t;
             dl->AddLine(p, p + ImVec2(-6, 8), withAlpha(ground, 200), 1.2f);
+        }
+        if (drain) {
+            // mũi tên nước thấm ra ngoài qua đáy
+            const ImVec2 ctr = (q[0] + q[1] + q[2] + q[3]) * 0.25f, gm = (g0 + g1) * 0.5f;
+            ImVec2 out(-gd.y, gd.x);
+            if (out.x * (ctr.x - gm.x) + out.y * (ctr.y - gm.y) > 0) out = out * -1.0f;
+            for (float t = 20; t < gl - 10; t += 40) arrow(dl, g0 + gd * t + out * 3.0f, g0 + gd * t + out * 16.0f, ground, 1.4f, 6);
         }
         if (f.topWall) dl->AddLine(t0, t1, fluidBcColor(FluidBcKind::Wall), 2.0f);
         else {
@@ -508,7 +575,8 @@ void drawFlowDomain(const App& a, ImDrawList* dl, const FlowDomain& f, bool prev
             for (float t = 0; t < tl; t += 12) dl->AddLine(t0 + td * t, t0 + td * std::min(t + 7, tl), fluidBcColor(FluidBcKind::Symmetry), 2.0f);
         }
         if (!preview) {
-            label(dl, (g0 + g1) * 0.5f + ImVec2(0, 16), "mặt đất / đáy", ground, ImVec2(0.5f, 0.5f), 0.85f);
+            label(dl, (g0 + g1) * 0.5f + ImVec2(0, drain ? 26.0f : 16.0f), freeDrain ? "mặt đất / đáy thoát tự do" : drain ? "mặt đất / đáy thấm nước" : "mặt đất / đáy", ground,
+                  ImVec2(0.5f, 0.5f), 0.85f);
             label(dl, (t0 + t1) * 0.5f - ImVec2(0, 12), f.topWall ? "trần cứng" : "mặt thoáng ▽", fluidBcColor(FluidBcKind::Symmetry),
                   ImVec2(0.5f, 0.5f), 0.85f);
         }
@@ -713,8 +781,10 @@ void App::viewport() {
         }
     }
     // dòng chảy chất lỏng: trường màu, đường dòng, véc tơ; khi chưa tính chỉ tô biên theo điều kiện biên
-    if (fluidOn) drawFluid(*this, dl);
-    else if (m.flow.active) drawFlowDomain(*this, dl, m.flow, false);
+    if (fluidOn) {
+        drawFluid(*this, dl);
+        if (m.flow.active) drawBankHatch(*this, dl, m.flow);
+    } else if (m.flow.active) drawFlowDomain(*this, dl, m.flow, false);
     else if (showFluid && fluidMeshError.empty() && currentFluidMesh().nCells > 0) {
         drawFluidBoundary(*this, dl, fluidMesh, fluidP);
         drawFluidLegend(*this, dl, fluidMesh, fluidP, false);

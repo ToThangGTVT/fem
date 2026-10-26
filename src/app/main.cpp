@@ -183,8 +183,9 @@ int main(int argc, char** argv) {
                 app.fluidRun = false;
                 app.fluidField = (int)fem::FluidField::Speed;
             }
-            if (f[0] == 'y') {
-                // y<bước>: mặt cắt đứng có mặt thoáng tự do — cột nước vỡ đập đổ vào khối công trình
+            if (f[0] == 'y' || f[0] == 'Y' || f[0] == 'Z') {
+                // y<t>: mặt cắt đứng có mặt thoáng tự do — cột nước vỡ đập đổ vào khối công trình; Y<t>: đáy thấm nước;
+                // Z<t>: đáy thoát tự do
                 fem::Model m;
                 m.title = "Vỡ đập — mặt thoáng tự do";
                 m.materials.push_back(fem::Material{});
@@ -204,6 +205,9 @@ int main(int argc, char** argv) {
                 fl.hFar = 0.05;
                 fl.dt = 0.01;
                 fl.endTime = 5;
+                fl.drainGround = f[0] == 'Y' || f[0] == 'Z';
+                fl.drainMode = f[0] == 'Z' ? 1 : 0;
+                fl.drainRate = 0.2;
                 const double P[4][2] = {{2.6, -0.05}, {2.9, -0.05}, {2.9, 0.3}, {2.6, 0.3}};
                 for (auto& q : P) m.nodes.push_back({q[0], q[1]});
                 for (int i = 0; i < 4; ++i) {

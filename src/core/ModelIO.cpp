@@ -82,14 +82,14 @@ std::string modelToText(const Model& m) {
         const FlowDomain& f = m.flow;
         o << "# FLOW xA yA xB yB L chiều U parabol môi_trường rho mu biên_trượt h h_xa không_dừng dt t_cuối "
              "mặt_cắt(0 bằng, 1 đứng) trần_cứng thủy_tĩnh mô_hình_rối(0 tự động, 1 tầng, 2 k-ε) cường_độ_rối "
-             "mặt_thoáng_tự_do độ_sâu_cửa_vào độ_sâu_ban_đầu đoạn_vỡ_đập\n";
+             "mặt_thoáng_tự_do độ_sâu_cửa_vào độ_sâu_ban_đầu đoạn_vỡ_đập đáy_thấm tốc_độ_thấm kiểu_thoát_đáy(0 thấm q, 1 thoát tự do)\n";
         o << "FLOW " << num(f.ax) << " " << num(f.ay) << " " << num(f.bx) << " " << num(f.by) << " " << num(f.length) << " "
           << f.side << " " << num(f.U) << " " << (f.parabolic ? 1 : 0) << " " << f.medium << " " << num(f.rho) << " "
           << num(f.mu) << " " << (f.slipWalls ? 1 : 0) << " " << num(f.h) << " " << num(f.hFar) << " "
           << (f.transient ? 1 : 0) << " " << num(f.dt) << " " << num(f.endTime) << " " << f.section << " "
           << (f.topWall ? 1 : 0) << " " << (f.hydrostatic ? 1 : 0) << " " << f.turbulence << " " << num(f.turbIntensity)
           << " " << (f.freeSurface ? 1 : 0) << " " << num(f.waterDepth) << " " << num(f.initDepth) << " " << num(f.gate)
-          << "\n";
+          << " " << (f.drainGround ? 1 : 0) << " " << num(f.drainRate) << " " << f.drainMode << "\n";
     }
     o << "\n";
     o << "# MATERIAL tên E nu alpha gamma [loại(1 thép, 2 bê tông) f/Rb Rbt (MPa)]\n";
@@ -230,6 +230,9 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
             f.waterDepth = d(24);
             f.initDepth = d(25, -1);
             f.gate = d(26);
+            f.drainGround = d(27) != 0;
+            f.drainRate = d(28, 0.01);
+            f.drainMode = d(29) != 0 ? 1 : 0;
             if (f.width() <= 0 || f.length <= 0) return fail("FLOW: kích thước miền chảy phải > 0");
         }
         else if (k == "ANALYSIS") {

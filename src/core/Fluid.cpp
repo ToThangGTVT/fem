@@ -43,6 +43,7 @@ const char* fluidBcName(FluidBcKind k) {
     case FluidBcKind::Outlet: return "Cửa ra (p = 0)";
     case FluidBcKind::Symmetry: return "Đối xứng";
     case FluidBcKind::Opening: return "Thông khí (p = 0)";
+    case FluidBcKind::FreeDrain: return "Đáy thoát tự do";
     }
     return "?";
 }
@@ -220,6 +221,8 @@ constexpr double kCmu = 0.09, kC1 = 1.44, kC2 = 1.92, kSigK = 1.0, kSigE = 1.3, 
 constexpr double kYLam = 11.06; // y* chuyển tiếp lớp nhớt – lớp logarit (hàm tường "co giãn": y* ≥ 11,06)
 
 bool isWall(FluidBcKind k) { return k == FluidBcKind::Wall || k == FluidBcKind::MovingWall; }
+// biên áp suất khí quyển: thông khí, đáy thoát tự do
+bool isOpen(FluidBcKind k) { return k == FluidBcKind::Opening || k == FluidBcKind::FreeDrain; }
 
 using Poly = std::vector<std::array<double, 2>>;
 
@@ -322,6 +325,7 @@ bool FluidSolver::init(const Model& m, const FluidParams& p) {
         sideMax_[s] = -std::numeric_limits<double>::max();
     }
     double innerY0 = std::numeric_limits<double>::max(), innerY1 = -innerY0;
+    double atmY = -std::numeric_limits<double>::max(); // đỉnh biên thông khí; không có: đỉnh miền
     for (int f = M_.nInternal; f < M_.nFaces; ++f) {
         const int s = M_.side[f];
         const bool vert = s == (int)FluidSide::Left || s == (int)FluidSide::Right;
@@ -336,8 +340,14 @@ bool FluidSolver::init(const Model& m, const FluidParams& p) {
             innerY1 = std::max({innerY1, lya, lyb});
         }
         if (fixedPressure(f)) hasOutlet_ = true;
-        if (P_.bc[s].kind == FluidBcKind::Outlet || P_.bc[s].kind == FluidBcKind::Opening) anyOutflow = true;
+        if (P_.bc[s].kind == FluidBcKind::Opening) atmY = std::max({atmY, M_.py[na], M_.py[nb]});
+        if (P_.bc[s].kind == FluidBcKind::Outlet || isOpen(P_.bc[s].kind) ||
+            (P_.bc[s].kind == FluidBcKind::Wall && P_.bc[s].drain > 0))
+            anyOutflow = true;
     }
+    if (atmY == -std::numeric_limits<double>::max())
+        for (double y : M_.py) atmY = std::max(atmY, y);
+    atmTop_ = atmY;
 
     // vận tốc, chiều dài tham chiếu
     double Uin = 0, Uwall = 0, Lin = 0, Lwall = 0;
@@ -430,7 +440,7 @@ bool FluidSolver::init(const Model& m, const FluidParams& p) {
         }
         for (int f = M_.nInternal; f < nf; ++f) {
             const FluidBcKind k = P_.bc[M_.side[f]].kind;
-            if (k == FluidBcKind::Outlet || k == FluidBcKind::Opening)
+            if (k == FluidBcKind::Outlet || isOpen(k))
                 F_[f] = u_[M_.owner[f]] * M_.sx[f] + v_[M_.owner[f]] * M_.sy[f];
         }
     }
@@ -458,6 +468,7 @@ bool FluidSolver::init(const Model& m, const FluidParams& p) {
     initTurbulence();
     iter_ = 0;
     time_ = 0;
+    drained_ = 0;
     converged_ = diverged_ = false;
     hist_.clear();
     return true;
@@ -465,12 +476,15 @@ bool FluidSolver::init(const Model& m, const FluidParams& p) {
 
 bool FluidSolver::fixedPressure(int f) const {
     const FluidBcKind k = P_.bc[M_.side[f]].kind;
-    return k == FluidBcKind::Opening || (k == FluidBcKind::Outlet && !P_.vof);
+    return isOpen(k) || (k == FluidBcKind::Outlet && !P_.vof);
 }
 
-// áp suất (VOF: p_rgh) cho trước trên biên: áp suất toàn phần bằng 0
+// áp suất (VOF: p_rgh) cho trước trên biên. Một pha: p = 0. VOF: áp suất khí quyển — bằng 0 ở đỉnh biên thông khí, tăng
+// theo cột không khí ρ₂·g·Δy xuống thấp hơn (đáy thoát tự do: không khí đứng yên, nước không có lực đỡ)
 double FluidSolver::fixedPressureValue(int f) const {
-    return P_.vof ? rhoC_[M_.owner[f]] * P_.gravity * M_.fy[f] : 0.0;
+    if (!P_.vof) return 0.0;
+    const double pAtm = P_.rho2 * P_.gravity * std::max(atmTop_ - M_.fy[f], 0.0);
+    return pAtm + rhoC_[M_.owner[f]] * P_.gravity * M_.fy[f];
 }
 
 double FluidSolver::inletProfile(int f) const {
@@ -495,7 +509,14 @@ void FluidSolver::boundaryVelocity(std::vector<double>& ub, std::vector<double>&
         const FluidBc& b = P_.bc[M_.side[f]];
         const int c = M_.owner[f];
         switch (b.kind) {
-        case FluidBcKind::Wall: break;
+        case FluidBcKind::Wall:
+            if (b.drain > 0) {
+                // thành thấm: chỉ có thành phần pháp tuyến hướng ra ngoài
+                const double L = std::hypot(M_.sx[f], M_.sy[f]), q = b.drain * (P_.vof ? alpha_[c] : 1.0);
+                ub[f] = q * M_.sx[f] / L;
+                vb[f] = q * M_.sy[f] / L;
+            }
+            break;
         case FluidBcKind::MovingWall:
             ub[f] = b.u;
             vb[f] = b.v;
@@ -514,6 +535,7 @@ void FluidSolver::boundaryVelocity(std::vector<double>& ub, std::vector<double>&
         }
         case FluidBcKind::Outlet:
         case FluidBcKind::Opening:
+        case FluidBcKind::FreeDrain:
             ub[f] = u_[c];
             vb[f] = v_[c];
             break;
@@ -539,7 +561,7 @@ void FluidSolver::boundaryAlpha(std::vector<double>& ab) const {
             const double ya = M_.py[M_.fa[f]], yb = M_.py[M_.fb[f]];
             const double lo = std::min(ya, yb), hi = std::max(ya, yb);
             ab[f] = hi - lo > 1e-12 ? std::clamp((P_.inletLevel - lo) / (hi - lo), 0.0, 1.0) : (M_.fy[f] <= P_.inletLevel ? 1.0 : 0.0);
-        } else if (k == FluidBcKind::Opening && F_[f] < 0)
+        } else if (isOpen(k) && F_[f] < 0)
             ab[f] = 0; // không khí đi vào qua biên thông khí
     }
 }
@@ -858,7 +880,7 @@ void FluidSolver::momentum(double& resU, double& resV) {
         const double F = rhoF_[f] * F_[f];
         const double dx = M_.fx[f] - M_.cx[P], dy = M_.fy[f] - M_.cy[P];
         const double SS = M_.sx[f] * M_.sx[f] + M_.sy[f] * M_.sy[f], dS = dx * M_.sx[f] + dy * M_.sy[f];
-        if (k == FluidBcKind::Outlet || k == FluidBcKind::Opening) {
+        if (k == FluidBcKind::Outlet || isOpen(k)) {
             // dòng ra: građien bằng 0, φb = φP (không đóng góp ở dạng bị chặn); dòng chảy ngược vào: φb = 0
             if (F < 0) diag_[P] -= F;
             continue;
@@ -1117,7 +1139,7 @@ void FluidSolver::solveTurbulence() {
                 const double Db = (muC_[P] + mut_[P] / sigma) * SS / (dx * M_.sx[f] + dy * M_.sy[f]);
                 diag_[P] += Db - F;
                 b[P] += Db * phiIn - F * phiIn;
-            } else if ((k == FluidBcKind::Outlet || k == FluidBcKind::Opening) && F < 0) {
+            } else if ((k == FluidBcKind::Outlet || isOpen(k)) && F < 0) {
                 diag_[P] -= F; // chảy ngược vào: mang giá trị cửa vào
                 b[P] -= F * phiIn;
             }
@@ -1219,6 +1241,8 @@ void FluidSolver::advectAlpha(double dt) {
             const double af = F_[f] >= 0 ? alpha_[M_.owner[f]] : ab[f];
             flux[f] = F_[f] * af;
             sumAf[f] += af;
+            const FluidBc& b = P_.bc[M_.side[f]];
+            if ((b.kind == FluidBcKind::Wall && b.drain > 0) || b.kind == FluidBcKind::FreeDrain) drained_ += h * flux[f];
         }
         for (int f = 0; f < nf; ++f) {
             alpha_[M_.owner[f]] -= h * flux[f] / M_.vol[M_.owner[f]];
@@ -1777,6 +1801,18 @@ std::string buildFlowProblem(const Model& m, Model& mesh, FluidParams& p, std::s
         } else {
             p.bc[(int)ground] = {FluidBcKind::Wall};
             p.bc[(int)top] = {f.topWall ? FluidBcKind::Wall : FluidBcKind::Symmetry};
+            if (f.drainGround && f.drainMode == 1) {
+                if (!f.freeSurface) return "Đáy thoát tự do cần mặt thoáng tự do (VOF): bật Mặt thoáng tự do hoặc chọn thấm với tốc độ q.";
+                p.bc[(int)ground] = {FluidBcKind::FreeDrain};
+                msg += " Mặt đất / đáy thoát tự do (không giới hạn).";
+                if (note) *note = msg;
+            } else if (f.drainGround && f.drainRate > 0) {
+                p.bc[(int)ground].drain = f.drainRate;
+                char t[120];
+                std::snprintf(t, sizeof t, " Mặt đất / đáy thấm nước, q = %.3g m/s.", f.drainRate);
+                msg += t;
+                if (note) *note = msg;
+            }
         }
         if (f.freeSurface) {
             // hai pha nước – không khí: biên trên thông khí, nước vào dưới mực nước ở cửa vào

@@ -377,7 +377,8 @@ const std::vector<Topic>& topics() {
            {"Thành cứng (u = 0, không trượt); thành di động (vận tốc tiếp tuyến cho trước); cửa vào (vận tốc đều "
             "hoặc parabol, u, v là giá trị lớn nhất); cửa ra (p = 0, građien vận tốc bằng 0); đối xứng / trượt.",
             "Màu biên trên sơ đồ: xám — thành cứng, cam — thành di động, xanh dương — cửa vào, đỏ — cửa ra, "
-            "xanh lá — đối xứng."}},
+            "xanh lá — đối xứng, xanh nhạt — thông khí, nâu cát có mũi tên — đáy thấm nước. Hộp chú thích dưới miền "
+            "chảy ghi tên các loại biên đang dùng."}},
           {"Phương pháp",
            {"Navier–Stokes không nén, ẩn đặt tại tâm ô; ghép áp suất – vận tốc theo SIMPLE, nội suy lưu lượng Rhie–Chow.",
             "Đối lưu: ngược dòng bậc nhất hoặc ngược dòng tuyến tính bậc hai; khuếch tán có hiệu chỉnh không trực giao; "
@@ -394,6 +395,19 @@ const std::vector<Topic>& topics() {
             "Mực nước ban đầu có thể khác cửa vào; \"Nước ban đầu chỉ trong đoạn dài\" > 0 cho bài toán vỡ đập, xả cửa cống.",
             "Luôn tính theo thời gian, Δt tự giảm theo số Courant. Đại lượng α tỉ lệ nước; đường trắng là mặt nước α = 0,5. "
             "Áp suất là áp suất thực (gồm thủy tĩnh); lực lên công trình gồm cả lực va đập của sóng."}},
+          {"Đáy thấm nước, đáy thoát tự do",
+           {"Mặt cắt đứng › Biên dưới / biên trên: tích \"Đáy thấm nước (nước thoát qua mặt đất)\", rồi chọn một trong hai "
+            "kiểu thoát. Vật cản vẽ bằng lệnh L không thấm.",
+            "Thấm với tốc độ q: nhập q (m/s); nước thoát ra theo phương vuông góc với đáy với tốc độ q, vận tốc dọc đáy vẫn "
+            "bằng 0. Chọn q gần đúng bằng hệ số thấm K của đất (thấm thẳng đứng) — sỏi ~10⁻², cát thô ~10⁻³, cát mịn "
+            "~10⁻⁴ m/s, đất sét gần như không thấm.",
+            "Thoát tự do (không giới hạn), cần Mặt thoáng tự do: đáy như tấm lưới hở — nước tới đáy bao nhiêu thoát hết bấy "
+            "nhiêu, rơi tự do theo trọng lực, không bị hút cưỡng bức; chỗ đáy khô không khí đứng yên. Vũng nước nằm trên đáy "
+            "sẽ rơi hết xuống. Trên sơ đồ, mặt đất vẽ nét đứt.",
+            "Có mặt thoáng tự do: chỉ phần đáy đang ngập nước mới thoát (không khí không bị hút qua đất khô). "
+            "Không có mặt thoáng: toàn bộ đáy thoát với tốc độ q.",
+            "Kết quả: cửa sổ Dòng chảy chất lỏng ghi \"Nước đã thoát qua đáy\" (m², cho 1 m bề dày); thể tích nước còn lại "
+            "cộng lượng đã thấm bằng thể tích ban đầu (trừ phần chảy ra cửa ra)."}},
           {"Kết quả",
            {"Phổ màu |u|, u, v, p, Cp, xoáy ω; véc tơ vận tốc, đường dòng; rê chuột lên sơ đồ để xem giá trị tại điểm.",
             "Lực chất lỏng lên biên trong (N/m, cho 1 m bề dày), hệ số cản Cd, nâng Cl, số Strouhal St (không dừng), "

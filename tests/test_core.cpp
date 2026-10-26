@@ -2149,6 +2149,62 @@ static void testTurbulenceFreeSurface() {
         near("VOF nước tĩnh: áp suất đáy ρ·g·h", pb, 998.2 * 9.81 * 0.48, 0.01);
         near("VOF: bảo toàn thể tích nước", sv.waterVolume(), V0, 1e-6);
     }
+    // ---- VOF: bể 1×1 m, mực 0,5 m, đáy thấm q = 0,05 m/s — nước thoát q·L·t, tổng thể tích bảo toàn
+    {
+        Model m;
+        m.materials.push_back(Material{});
+        ChannelSpec s;
+        s.obstacle = 0;
+        s.L = s.H = 1;
+        s.h = 0.04;
+        meshChannel(m, s, 0);
+        FluidParams p = vp;
+        p.initLevel = 0.5;
+        p.bc[(int)FluidSide::Bottom].drain = 0.05;
+        FluidSolver sv;
+        check(sv.init(m, p), "khởi tạo bể đáy thấm", 0, 0);
+        const double V0 = sv.waterVolume();
+        while (sv.time() < 1.0 - 1e-9)
+            if (!sv.step()) break;
+        check(!sv.diverged(), "đáy thấm: không phân kỳ", 0, 0);
+        near("đáy thấm: thể tích còn lại + đã thấm = ban đầu", sv.waterVolume() + sv.drainedVolume(), V0, 1e-6);
+        near("đáy thấm: lượng thấm q·L·t", sv.drainedVolume(), 0.05 * 1 * sv.time(), 0.03);
+        double umax = 0;
+        for (int c = 0; c < sv.mesh().nCells; ++c)
+            if (sv.alpha()[c] > 0.5) umax = std::max(umax, std::hypot(sv.u()[c], sv.v()[c]));
+        check(umax < 0.1, "đáy thấm: nước hạ đều, không xoáy giả", umax, 0.05);
+    }
+    // ---- VOF: đáy thoát tự do — cột nước không có lực đỡ rơi tự do: lượng thoát ½·g·t²·L; bể khô: không khí đứng yên
+    {
+        Model m;
+        m.materials.push_back(Material{});
+        ChannelSpec s;
+        s.obstacle = 0;
+        s.L = s.H = 1;
+        s.h = 0.04;
+        meshChannel(m, s, 0);
+        FluidParams p = vp;
+        p.initLevel = 0.5;
+        p.bc[(int)FluidSide::Bottom] = {FluidBcKind::FreeDrain};
+        FluidSolver sv;
+        check(sv.init(m, p), "khởi tạo bể đáy thoát tự do", 0, 0);
+        const double V0 = sv.waterVolume();
+        while (sv.time() < 0.2 - 1e-9)
+            if (!sv.step()) break;
+        check(!sv.diverged(), "đáy thoát tự do: không phân kỳ", 0, 0);
+        near("đáy thoát tự do: thể tích còn lại + đã thoát = ban đầu", sv.waterVolume() + sv.drainedVolume(), V0, 1e-6);
+        near("đáy thoát tự do: cột nước rơi tự do ½·g·t²", sv.drainedVolume(), 0.5 * 9.81 * sv.time() * sv.time(), 0.1);
+
+        FluidParams pa = p;
+        pa.initLevel = 0; // bể khô: áp suất khí quyển ở đáy khớp cột không khí, không có dòng giả
+        FluidSolver sa;
+        check(sa.init(m, pa), "khởi tạo bể khô đáy thoát tự do", 0, 0);
+        while (sa.time() < 0.5 - 1e-9)
+            if (!sa.step()) break;
+        double umax = 0;
+        for (int c = 0; c < sa.mesh().nCells; ++c) umax = std::max(umax, std::hypot(sa.u()[c], sa.v()[c]));
+        check(umax < 0.01, "đáy thoát tự do, bể khô: không khí đứng yên", umax, 0.01);
+    }
     // ---- vỡ đập Martin & Moyce (1952): cột nước a × 2a đổ ra lòng bể; mép sóng Z = x/a theo T = t·√(2g/a).
     // Thí nghiệm Z(2) ≈ 2,33; các lời giải VOF công bố ≈ 2,5–2,7 (thí nghiệm trễ do nhấc cửa).
     {
@@ -2201,6 +2257,27 @@ static void testTurbulenceFreeSurface() {
         bad.flow.freeSurface = true;
         bad.flow.waterDepth = 3; // sâu hơn chiều cao AB
         check(!buildFlowProblem(bad, mesh, p).empty(), "báo lỗi: độ sâu nước vượt chiều cao miền", 0, 0);
+        // đáy thấm khai báo trong mô hình: điều kiện thấm đặt trên biên dưới (mặt đất), các biên khác không thấm
+        m.flow.drainGround = true;
+        m.flow.drainRate = 0.02;
+        FluidParams pd;
+        check(buildFlowProblem(m, mesh, pd).empty() && pd.bc[(int)FluidSide::Bottom].kind == FluidBcKind::Wall &&
+                  pd.bc[(int)FluidSide::Bottom].drain == 0.02 && pd.bc[(int)FluidSide::Inner].drain == 0 &&
+                  pd.bc[(int)FluidSide::Top].drain == 0,
+              "đáy thấm: điều kiện thấm trên mặt đất", 0, 0);
+        FluidSolver sd;
+        check(sd.init(mesh, pd), "khởi tạo mặt thoáng đáy thấm", 0, 0);
+        ok = true;
+        for (int i = 0; i < 30 && ok; ++i) ok = sd.step();
+        check(ok && !sd.diverged() && sd.drainedVolume() > 0, "đáy thấm: chạy 30 bước, nước thoát qua đáy", sd.drainedVolume(), 0);
+        // đáy thoát tự do: biên dưới thành FreeDrain; không có mặt thoáng tự do thì báo lỗi
+        m.flow.drainMode = 1;
+        FluidParams pf;
+        check(buildFlowProblem(m, mesh, pf).empty() && pf.bc[(int)FluidSide::Bottom].kind == FluidBcKind::FreeDrain &&
+                  pf.bc[(int)FluidSide::Top].kind == FluidBcKind::Opening,
+              "đáy thoát tự do: biên dưới thoát tự do, biên trên thông khí", 0, 0);
+        m.flow.freeSurface = false;
+        check(!buildFlowProblem(m, mesh, pf).empty(), "báo lỗi: đáy thoát tự do khi không có mặt thoáng tự do", 0, 0);
     }
     // ---- ghi / đọc
     {
@@ -2209,9 +2286,13 @@ static void testTurbulenceFreeSurface() {
         m.flow.freeSurface = true;
         m.flow.waterDepth = 1.2;
         m.flow.gate = 0.7;
+        m.flow.drainGround = true;
+        m.flow.drainRate = 0.003;
+        m.flow.drainMode = 1;
         std::string err;
         check(modelFromText(modelToText(m), r, err) && r.flow.turbulence == 2 && r.flow.freeSurface &&
-                  std::abs(r.flow.waterDepth - 1.2) < 1e-12 && std::abs(r.flow.gate - 0.7) < 1e-12,
+                  std::abs(r.flow.waterDepth - 1.2) < 1e-12 && std::abs(r.flow.gate - 0.7) < 1e-12 && r.flow.drainGround &&
+                  std::abs(r.flow.drainRate - 0.003) < 1e-12 && r.flow.drainMode == 1,
               "ghi/đọc mô hình rối, mặt thoáng", 0, 0);
     }
 }

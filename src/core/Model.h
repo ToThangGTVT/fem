@@ -180,6 +180,11 @@ struct FlowDomain {
     double waterDepth = 0;  // độ sâu nước ở cửa vào, đo từ đáy dọc AB (m)
     double initDepth = -1;  // độ sâu nước ban đầu trong miền (m); < 0: bằng waterDepth
     double gate = 0;        // nước ban đầu chỉ trong đoạn dài này từ cửa vào (vỡ đập, xả cửa cống); 0: toàn miền
+    // mặt cắt đứng: mặt đất / đáy thấm nước — nước thoát ra qua đáy với tốc độ thấm drainRate (m/s, ≈ hệ số thấm K khi
+    // dòng thấm thẳng đứng, gradient thủy lực 1); có mặt thoáng tự do: chỉ phần ngập nước thoát
+    bool drainGround = false;
+    double drainRate = 0.01;
+    int drainMode = 0; // 0: thấm với tốc độ drainRate; 1: thoát tự do, không giới hạn (cần mặt thoáng tự do)
 
     double width() const;
     void direction(double& nx, double& ny) const; // hướng chảy (véc tơ đơn vị)

@@ -155,6 +155,10 @@ thanh tại điểm nối chữ T) và xuất sơ đồ, biểu đồ nội lự
   công thức Dean (sai 3%), trụ vuông Re ≈ 10⁶ có Cd ≈ 2.
 - Mặt thoáng tự do (mặt cắt đứng): hai pha nước – không khí VOF, sơ đồ nén HRIC, dạng cân bằng lực (không dòng giả); nước
   dâng, sóng, dòng qua đập tràn, vỡ đập (kiểm chứng Martin & Moyce, bảo toàn thể tích nước).
+- Mặt đất / đáy thấm nước (mặt cắt đứng): nước thoát qua đáy với tốc độ thấm q (≈ hệ số thấm K), có mặt thoáng tự do thì chỉ
+  phần ngập nước thoát; hoặc đáy thoát tự do, không giới hạn (mặt thoáng tự do: nước tới đáy rơi tự do ra ngoài, không
+  khí ở chỗ đáy khô đứng yên). Hiển thị thể tích đã thoát (kiểm chứng: bể đáy thấm thoát đúng q·L·t; đáy thoát tự do:
+  cột nước rơi ½·g·t²; tổng thể tích bảo toàn).
 - Navier–Stokes không nén 2D; lưới phi cấu trúc lấy từ các phần tử phẳng của mô hình (T3, Q4, T6, Q8),
   ẩn số tại tâm ô; SIMPLE với nội suy Rhie–Chow (hiệu chỉnh Majumdar, Choi: nghiệm không phụ thuộc α, Δt), gradient
   bình phương tối thiểu, hiệu chỉnh không trực giao và độ lệch của lưới tam giác; đối lưu ngược dòng bậc 1 / tuyến tính bậc 2.
