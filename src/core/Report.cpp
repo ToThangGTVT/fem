@@ -7,6 +7,7 @@
 #include <sstream>
 
 #include "core/PostProcess.h"
+#include "core/I18n.h"
 
 namespace fem {
 
@@ -178,7 +179,7 @@ std::string deformedSvg(const Model& m, const LoadSetResult& rs) {
         }
     }
     s.text(m.nodes[imax].x + rs.U[3 * imax] * S, m.nodes[imax].y + rs.U[3 * imax + 1] * S,
-           fmt("δmax = %.3f mm (nút %d)", umax * 1e3, imax + 1), "#c2268f", 11, "start");
+           trf("δmax = %.3f mm (nút %d)", umax * 1e3, imax + 1), "#c2268f", 11, "start");
     return s.str();
 }
 
@@ -186,7 +187,7 @@ std::string deformedSvg(const Model& m, const LoadSetResult& rs) {
 
 std::string htmlReport(const Model& m, const AnalysisResult& r, const HtmlReportOptions& opt) {
     std::ostringstream o;
-    o << "<!doctype html><html lang='vi'><head><meta charset='utf-8'><title>" << esc(m.title.empty() ? "Báo cáo FEM2D" : m.title)
+    o << "<!doctype html><html lang='" << languageCode() << "'><head><meta charset='utf-8'><title>" << esc(m.title.empty() ? tr("Báo cáo FEM2D") : m.title)
       << "</title><style>"
          "body{font-family:-apple-system,Segoe UI,Arial,sans-serif;margin:24px auto;max-width:900px;color:#1d2530}"
          "h1{font-size:22px;border-bottom:2px solid #0a6ed1;padding-bottom:6px}h2{font-size:18px;margin-top:28px;color:#0a5aa8}"
@@ -196,11 +197,10 @@ std::string htmlReport(const Model& m, const AnalysisResult& r, const HtmlReport
          "svg{border:1px solid #dde3ea;margin:6px 0;max-width:100%;height:auto}"
          "@media print{h2{page-break-before:always}h2.first{page-break-before:avoid}}"
          "</style></head><body>\n";
-    o << "<h1>" << esc(m.title.empty() ? "Báo cáo tính toán kết cấu" : m.title) << "</h1>\n";
-    o << "<p class='note'>Lập bằng FEM2D — phương pháp phần tử hữu hạn (phương pháp chuyển vị). Đơn vị: kN, m; "
-         "chuyển vị mm; ứng suất MPa. Quy ước: N &gt; 0 kéo; M &gt; 0 căng thớ dưới, biểu đồ M vẽ về phía thớ căng.</p>\n";
+    o << "<h1>" << esc(m.title.empty() ? tr("Báo cáo tính toán kết cấu") : m.title) << "</h1>\n";
+    o << tr("<p class='note'>Lập bằng FEM2D — phương pháp phần tử hữu hạn (phương pháp chuyển vị). Đơn vị: kN, m; chuyển vị mm; ứng suất MPa. Quy ước: N &gt; 0 kéo; M &gt; 0 căng thớ dưới, biểu đồ M vẽ về phía thớ căng.</p>\n");
     // ---- dữ liệu
-    o << "<h2 class='first'>1. Sơ đồ tính và dữ liệu</h2>\n";
+    o << tr("<h2 class='first'>1. Sơ đồ tính và dữ liệu</h2>\n");
     {
         Svg s(m, 0.1);
         drawStructure(s, m, false);
@@ -210,9 +210,9 @@ std::string htmlReport(const Model& m, const AnalysisResult& r, const HtmlReport
     }
     int nb = 0, np = 0;
     for (const auto& e : m.elements) (e.isBar() ? nb : np)++;
-    o << fmt("<p>Số nút: %zu; số thanh: %d; số phần tử phẳng: %d; số gối: %zu; số phương trình: %d.</p>\n", m.nodes.size(), nb,
+    o << trf("<p>Số nút: %zu; số thanh: %d; số phần tử phẳng: %d; số gối: %zu; số phương trình: %d.</p>\n", m.nodes.size(), nb,
              np, m.supports.size(), r.numEquations);
-    o << "<h3>Vật liệu</h3><table><tr><th>#</th><th>Tên</th><th>E (MPa)</th><th>ν</th><th>γ (kN/m³)</th></tr>\n";
+    o << tr("<h3>Vật liệu</h3><table><tr><th>#</th><th>Tên</th><th>E (MPa)</th><th>ν</th><th>γ (kN/m³)</th></tr>\n");
     for (size_t i = 0; i < m.materials.size(); ++i) {
         const auto& x = m.materials[i];
         o << fmt("<tr><td>%zu</td><td style='text-align:left'>%s</td><td>%.0f</td><td>%.2f</td><td>%.1f</td></tr>\n", i + 1,
@@ -220,7 +220,7 @@ std::string htmlReport(const Model& m, const AnalysisResult& r, const HtmlReport
     }
     o << "</table>\n";
     if (nb) {
-        o << "<h3>Tiết diện</h3><table><tr><th>#</th><th>Tên</th><th>A (cm²)</th><th>I (cm⁴)</th><th>h (cm)</th></tr>\n";
+        o << tr("<h3>Tiết diện</h3><table><tr><th>#</th><th>Tên</th><th>A (cm²)</th><th>I (cm⁴)</th><th>h (cm)</th></tr>\n");
         for (size_t i = 0; i < m.sections.size(); ++i) {
             const auto& x = m.sections[i];
             o << fmt("<tr><td>%zu</td><td style='text-align:left'>%s</td><td>%.2f</td><td>%.1f</td><td>%.1f</td></tr>\n", i + 1,
@@ -228,12 +228,12 @@ std::string htmlReport(const Model& m, const AnalysisResult& r, const HtmlReport
         }
         o << "</table>\n";
     }
-    o << "<h3>Trường hợp tải và tổ hợp</h3><ul>\n";
+    o << tr("<h3>Trường hợp tải và tổ hợp</h3><ul>\n");
     for (const auto& c : m.cases)
-        o << "<li>" << esc(c.name) << fmt(": %zu tải nút, %zu tải trên thanh%s</li>\n", c.nodal.size(), c.elem.size(),
-                                           c.selfWeight != 0 ? ", có trọng lượng bản thân" : "");
+        o << "<li>" << esc(c.name) << trf(": %zu tải nút, %zu tải trên thanh%s</li>\n", c.nodal.size(), c.elem.size(),
+                                           c.selfWeight != 0 ? tr(", có trọng lượng bản thân") : "");
     for (const auto& c : m.combos) {
-        o << "<li>Tổ hợp " << esc(c.name) << ": ";
+        o << "<li>" << tr("Tổ hợp") << " " << esc(c.name) << ": ";
         for (size_t k = 0; k < c.terms.size(); ++k)
             o << (k ? " + " : "") << fmt("%.3g×", c.terms[k].second)
               << esc(c.terms[k].first < (int)m.cases.size() ? m.cases[c.terms[k].first].name : "?");
@@ -241,49 +241,48 @@ std::string htmlReport(const Model& m, const AnalysisResult& r, const HtmlReport
     }
     o << "</ul>\n";
     if (!r.ok) {
-        o << "<p><b>Lỗi tính toán:</b> " << esc(r.error) << "</p></body></html>";
+        o << "<p><b>" << tr("Lỗi tính toán:") << "</b> " << esc(r.error) << "</p></body></html>";
         return o.str();
     }
     for (const auto& w : r.warnings) o << "<p class='note'>⚠ " << esc(w) << "</p>\n";
     // ---- kết quả từng bộ tải
     int sec = 2;
     for (const auto& s : r.sets) {
-        o << fmt("<h2>%d. %s: ", sec++, s.combo ? "Tổ hợp" : "Trường hợp tải") << esc(s.name) << "</h2>\n";
-        o << fmt("<p>Tổng tải ΣFx = %.3f, ΣFy = %.3f kN; tổng phản lực ΣRx = %.3f, ΣRy = %.3f kN.</p>\n", s.sumFx, s.sumFy, s.sumRx,
+        o << fmt("<h2>%d. %s: ", sec++, s.combo ? tr("Tổ hợp") : tr("Trường hợp tải")) << esc(s.name) << "</h2>\n";
+        o << trf("<p>Tổng tải ΣFx = %.3f, ΣFy = %.3f kN; tổng phản lực ΣRx = %.3f, ΣRy = %.3f kN.</p>\n", s.sumFx, s.sumFy, s.sumRx,
                  s.sumRy);
         if (nb) {
             if (opt.diagramM) {
                 const std::string d = diagramSvg(m, s, BarQty::M);
-                if (!d.empty()) o << "<h3>Biểu đồ mômen M (kNm)</h3>" << d;
+                if (!d.empty()) o << tr("<h3>Biểu đồ mômen M (kNm)</h3>") << d;
             }
             if (opt.diagramQ) {
                 const std::string d = diagramSvg(m, s, BarQty::Q);
-                if (!d.empty()) o << "<h3>Biểu đồ lực cắt Q (kN)</h3>" << d;
+                if (!d.empty()) o << tr("<h3>Biểu đồ lực cắt Q (kN)</h3>") << d;
             }
             if (opt.diagramN) {
                 const std::string d = diagramSvg(m, s, BarQty::N);
-                if (!d.empty()) o << "<h3>Biểu đồ lực dọc N (kN)</h3>" << d;
+                if (!d.empty()) o << tr("<h3>Biểu đồ lực dọc N (kN)</h3>") << d;
             }
         }
         if (opt.deformed) {
             const std::string d = deformedSvg(m, s);
-            if (!d.empty()) o << "<h3>Hình biến dạng</h3>" << d;
+            if (!d.empty()) o << tr("<h3>Hình biến dạng</h3>") << d;
         }
         if (!opt.tables) continue;
-        o << "<h3>Phản lực gối</h3><table><tr><th>Nút</th><th>Rx (kN)</th><th>Ry (kN)</th><th>M (kNm)</th></tr>\n";
+        o << tr("<h3>Phản lực gối</h3><table><tr><th>Nút</th><th>Rx (kN)</th><th>Ry (kN)</th><th>M (kNm)</th></tr>\n");
         for (size_t i = 0; i < m.nodes.size(); ++i) {
             bool any = false;
             for (int c = 0; c < 3; ++c) any |= r.dofState[3 * i + c] == DofSupport || s.R[3 * i + c] != 0;
             if (any) o << fmt("<tr><td>%zu</td><td>%.3f</td><td>%.3f</td><td>%.3f</td></tr>\n", i + 1, s.R[3 * i], s.R[3 * i + 1], s.R[3 * i + 2]);
         }
-        o << "</table>\n<h3>Chuyển vị nút</h3><table><tr><th>Nút</th><th>ux (mm)</th><th>uy (mm)</th><th>φz (rad)</th></tr>\n";
+        o << tr("</table>\n<h3>Chuyển vị nút</h3><table><tr><th>Nút</th><th>ux (mm)</th><th>uy (mm)</th><th>φz (rad)</th></tr>\n");
         for (size_t i = 0; i < m.nodes.size() && (int)i < opt.maxRows; ++i)
             o << fmt("<tr><td>%zu</td><td>%.4f</td><td>%.4f</td><td>%.3e</td></tr>\n", i + 1, s.U[3 * i] * 1e3, s.U[3 * i + 1] * 1e3,
                      s.U[3 * i + 2]);
         o << "</table>\n";
         if (nb) {
-            o << "<h3>Nội lực đầu thanh</h3><table><tr><th>Thanh</th><th>Ni</th><th>Qi</th><th>Mi</th><th>Nj</th><th>Qj</th>"
-                 "<th>Mj</th><th>M nhịp max</th></tr>\n";
+            o << tr("<h3>Nội lực đầu thanh</h3><table><tr><th>Thanh</th><th>Ni</th><th>Qi</th><th>Mi</th><th>Nj</th><th>Qj</th><th>Mj</th><th>M nhịp max</th></tr>\n");
             int rows = 0;
             for (size_t e = 0; e < m.elements.size() && rows < opt.maxRows; ++e) {
                 if (!m.elements[e].isBar()) continue;
@@ -301,8 +300,8 @@ std::string htmlReport(const Model& m, const AnalysisResult& r, const HtmlReport
         }
         if (np) {
             const bool axi = m.planeMode == PlaneMode::Axisymmetric;
-            o << (axi ? "<h3>Ứng suất tại nút (trung bình, MPa)</h3><table><tr><th>Nút</th><th>σr</th><th>σz</th><th>τrz</th><th>σθ</th>"
-                      : "<h3>Ứng suất tại nút (trung bình, MPa)</h3><table><tr><th>Nút</th><th>σx</th><th>σy</th><th>τxy</th><th>σz</th>")
+            o << (axi ? tr("<h3>Ứng suất tại nút (trung bình, MPa)</h3><table><tr><th>Nút</th><th>σr</th><th>σz</th><th>τrz</th><th>σθ</th>")
+                      : tr("<h3>Ứng suất tại nút (trung bình, MPa)</h3><table><tr><th>Nút</th><th>σx</th><th>σy</th><th>τxy</th><th>σz</th>"))
               << "<th>σ1</th><th>σ2</th><th>σvM</th></tr>\n";
             int rows = 0;
             for (size_t i = 0; i < m.nodes.size() && rows < opt.maxRows; ++i) {

@@ -9,6 +9,7 @@
 
 #include "core/PlaneElements.h"
 #include "core/Skyline.h"
+#include "core/I18n.h"
 
 namespace fem {
 
@@ -41,42 +42,42 @@ struct Coupling {
 };
 
 std::string validate(const Model& m) {
-    if (m.elements.empty()) return "Mô hình chưa có phần tử.";
-    if (m.cases.empty()) return "Chưa có trường hợp tải.";
+    if (m.elements.empty()) return tr("Mô hình chưa có phần tử.");
+    if (m.cases.empty()) return tr("Chưa có trường hợp tải.");
     if (std::all_of(m.supports.begin(), m.supports.end(), [](const Support& s) { return s.empty(); }))
-        return "Chưa có gối tựa: kết cấu là hệ biến hình.";
+        return tr("Chưa có gối tựa: kết cấu là hệ biến hình.");
     const int nn = (int)m.nodes.size();
     for (size_t e = 0; e < m.elements.size(); ++e) {
         const Element& el = m.elements[e];
         const int id = (int)e + 1;
         for (int k = 0; k < el.nodeCount(); ++k) {
-            if (el.n[k] < 0 || el.n[k] >= nn) return fmt("Phần tử %d: chỉ số nút không hợp lệ.", id);
+            if (el.n[k] < 0 || el.n[k] >= nn) return trf("Phần tử %d: chỉ số nút không hợp lệ.", id);
             for (int j = 0; j < k; ++j)
-                if (el.n[j] == el.n[k]) return fmt("Phần tử %d: có hai nút trùng nhau.", id);
+                if (el.n[j] == el.n[k]) return trf("Phần tử %d: có hai nút trùng nhau.", id);
         }
-        if (el.mat < 0 || el.mat >= (int)m.materials.size()) return fmt("Phần tử %d: chưa gán vật liệu.", id);
+        if (el.mat < 0 || el.mat >= (int)m.materials.size()) return trf("Phần tử %d: chưa gán vật liệu.", id);
         const Material& mat = m.materials[el.mat];
-        if (mat.E <= 0) return fmt("Vật liệu \"%s\": E phải > 0.", mat.name.c_str());
+        if (mat.E <= 0) return trf("Vật liệu \"%s\": E phải > 0.", mat.name.c_str());
         if (el.isBar()) {
-            if (el.sec < 0 || el.sec >= (int)m.sections.size()) return fmt("Phần tử %d: chưa gán tiết diện.", id);
+            if (el.sec < 0 || el.sec >= (int)m.sections.size()) return trf("Phần tử %d: chưa gán tiết diện.", id);
             const Section& s = m.sections[el.sec];
-            if (s.A <= 0) return fmt("Tiết diện \"%s\": A phải > 0.", s.name.c_str());
+            if (s.A <= 0) return trf("Tiết diện \"%s\": A phải > 0.", s.name.c_str());
             if (el.type == ElemType::Frame && s.I <= 0)
-                return fmt("Tiết diện \"%s\": I phải > 0 cho thanh khung.", s.name.c_str());
-            if (m.barLength((int)e) <= 1e-12) return fmt("Phần tử %d có chiều dài bằng 0.", id);
+                return trf("Tiết diện \"%s\": I phải > 0 cho thanh khung.", s.name.c_str());
+            if (m.barLength((int)e) <= 1e-12) return trf("Phần tử %d có chiều dài bằng 0.", id);
         } else {
-            if (el.t <= 0) return fmt("Phần tử %d: chiều dày phải > 0.", id);
-            if (mat.nu <= -1 || mat.nu >= 0.5) return fmt("Vật liệu \"%s\": hệ số Poisson phải trong (−1; 0,5).", mat.name.c_str());
+            if (el.t <= 0) return trf("Phần tử %d: chiều dày phải > 0.", id);
+            if (mat.nu <= -1 || mat.nu >= 0.5) return trf("Vật liệu \"%s\": hệ số Poisson phải trong (−1; 0,5).", mat.name.c_str());
             if (m.planeMode == PlaneMode::Axisymmetric)
                 for (int k = 0; k < el.nodeCount(); ++k)
                     if (m.nodes[el.n[k]].x < -1e-12)
-                        return fmt("Bài toán đối xứng trục: phần tử %d có nút với r = x < 0.", id);
+                        return trf("Bài toán đối xứng trục: phần tử %d có nút với r = x < 0.", id);
         }
     }
     for (const auto& c : m.combos)
         for (const auto& t : c.terms)
             if (t.first < 0 || t.first >= (int)m.cases.size())
-                return fmt("Tổ hợp \"%s\" tham chiếu trường hợp tải không tồn tại.", c.name.c_str());
+                return trf("Tổ hợp \"%s\" tham chiếu trường hợp tải không tồn tại.", c.name.c_str());
     return {};
 }
 
@@ -177,8 +178,8 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
                 for (int c = 0; c < 2; ++c) d.dofs.push_back(3 * el.n[k] + c);
         }
         if (!elementMatrix(m, e, d)) {
-            res.error = fmt("Phần tử %d bị suy biến (diện tích bằng 0, tứ giác lõm/xoắn%s).", e + 1,
-                            m.planeMode == PlaneMode::Axisymmetric ? ", hoặc nằm ở phía r < 0" : "");
+            res.error = trf("Phần tử %d bị suy biến (diện tích bằng 0, tứ giác lõm/xoắn%s).", e + 1,
+                            m.planeMode == PlaneMode::Axisymmetric ? tr(", hoặc nằm ở phía r < 0") : "");
             return res;
         }
         const int n = (int)d.dofs.size();
@@ -219,8 +220,8 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
         if (res.dofState[d] != DofFree || hasStiff[d]) continue;
         res.dofState[d] = DofAuto;
         const int node = d / 3, c = d % 3;
-        if (!used[node]) warnOnce(fmt("Nút %d không thuộc phần tử nào — đã bỏ qua.", node + 1));
-        else if (c != RZ) warnOnce(fmt("Nút %d: bậc tự do %s không có độ cứng — đã tự động khóa.", node + 1, dofName(c)));
+        if (!used[node]) warnOnce(trf("Nút %d không thuộc phần tử nào — đã bỏ qua.", node + 1));
+        else if (c != RZ) warnOnce(trf("Nút %d: bậc tự do %s không có độ cứng — đã tự động khóa.", node + 1, dofName(c)));
     }
 
     // ---- đánh số phương trình theo thứ tự RCM, profile
@@ -270,10 +271,9 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
         for (int d = 0; d < ndof; ++d)
             if (eq[d] == bad) dof = d;
         if (unstable)
-            return fmt("Mất ổn định trong phân tích bậc hai (tải trọng vượt tải trọng tới hạn) — suy biến tại nút %d, %s.",
+            return trf("Mất ổn định trong phân tích bậc hai (tải trọng vượt tải trọng tới hạn) — suy biến tại nút %d, %s.",
                        dof / 3 + 1, dofName(dof % 3));
-        return fmt("Hệ biến hình (không ổn định hình học): ma trận độ cứng suy biến tại nút %d, bậc tự do %s. "
-                   "Hãy kiểm tra liên kết gối tựa, khớp và cách nối các thanh.",
+        return trf("Hệ biến hình (không ổn định hình học): ma trận độ cứng suy biến tại nút %d, bậc tự do %s. Hãy kiểm tra liên kết gối tựa, khớp và cách nối các thanh.",
                    dof / 3 + 1, dofName(dof % 3));
     };
 
@@ -317,7 +317,7 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
             for (const auto& l : lc.elem) {
                 if (l.elem < 0 || l.elem >= ne) continue;
                 if (!m.elements[l.elem].isBar()) {
-                    warnOnce(fmt("Tải trên phần tử phẳng %d chưa được hỗ trợ — đã bỏ qua (hãy dùng tải nút).", l.elem + 1));
+                    warnOnce(trf("Tải trên phần tử phẳng %d chưa được hỗ trợ — đã bỏ qua (hãy dùng tải nút).", l.elem + 1));
                     continue;
                 }
                 addBarLoad(eds[l.elem].bar, l, f, bl[l.elem]);
@@ -326,7 +326,7 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
                 if (d.node < 0 || d.node >= nn || d.dof < 0 || d.dof > 2) continue;
                 const int dof = 3 * d.node + d.dof;
                 if (res.dofState[dof] != DofSupport) {
-                    warnOnce(fmt("Chuyển vị cưỡng bức tại nút %d (%s) bỏ qua vì bậc tự do này không bị khóa.", d.node + 1,
+                    warnOnce(trf("Chuyển vị cưỡng bức tại nút %d (%s) bỏ qua vì bậc tự do này không bị khóa.", d.node + 1,
                                  dofName(d.dof)));
                     continue;
                 }
@@ -358,7 +358,7 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
         for (int d = 0; d < ndof; ++d) {
             if (eq[d] >= 0) rhs[eq[d]] = F[d];
             else if (res.dofState[d] == DofAuto && std::abs(F[d]) > 1e-12)
-                warnOnce(fmt("Tải tại nút %d theo %s bị bỏ qua vì bậc tự do này không có độ cứng.", d / 3 + 1, dofName(d % 3)));
+                warnOnce(trf("Tải tại nút %d theo %s bị bỏ qua vì bậc tự do này không có độ cứng.", d / 3 + 1, dofName(d % 3)));
         }
         for (const auto& c : cpl) rhs[c.eq] -= c.k * up[c.dof];
         K.solve(rhs);
@@ -483,12 +483,12 @@ AnalysisResult analyze(const Model& m, int samplesPerBar) {
             }
         }
         if (!converged)
-            warnOnce(fmt("Bộ tải \"%s\": vòng lặp phi tuyến chưa hội tụ sau %d bước.", def.name.c_str(), maxIt));
+            warnOnce(trf("Bộ tải \"%s\": vòng lặp phi tuyến chưa hội tụ sau %d bước.", def.name.c_str(), maxIt));
         if (anyCompOnly) {
             int lost = 0;
             for (int e = 0; e < ne; ++e)
                 if (m.elements[e].kfCompOnly && !contact[e]) ++lost;
-            if (lost) warnOnce(fmt("Bộ tải \"%s\": %d đoạn thanh tách khỏi nền (nền chỉ chịu nén).", def.name.c_str(), lost));
+            if (lost) warnOnce(trf("Bộ tải \"%s\": %d đoạn thanh tách khỏi nền (nền chỉ chịu nén).", def.name.c_str(), lost));
         }
         res.sets.push_back(std::move(out));
     }

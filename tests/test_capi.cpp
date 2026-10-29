@@ -111,11 +111,29 @@ static void testErrors() {
     expect(!d.getBool("ok", true), "báo lỗi con trỏ rỗng");
 }
 
+static void testLanguage() {
+    fem_set_language("en");
+    json::Value ex = call(fem_examples());
+    expect(!ex.getArr("examples").empty() && ex.getArr("examples")[0].getStr("name") == "Simply supported beam",
+           "tiếng Anh: tên bài mẫu");
+    json::Value e = call(fem_example_model(9999));
+    expect(e.getStr("error") == "There is no example number 9999", "tiếng Anh: thông báo lỗi có tham số");
+    fem_set_language("ja-JP");
+    json::Value m = call(fem_example_model(0));
+    const json::Value* model = m.find("model");
+    expect(model && model->getStr("title").rfind("単純梁", 0) == 0, "tiếng Nhật: tiêu đề mô hình bài mẫu");
+    fem_set_language("fr"); // chưa hỗ trợ: về tiếng Việt
+    json::Value v = call(fem_example_model(9999));
+    expect(v.getStr("error") == "Không có bài mẫu số 9999", "ngôn ngữ chưa hỗ trợ: tiếng Việt");
+    fem_set_language("vi");
+}
+
 int main() {
     testJson();
     testExamplesRoundTrip();
     testSimpleBeamValues();
     testErrors();
+    testLanguage();
     std::printf("capi: %d đạt, %d lỗi\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

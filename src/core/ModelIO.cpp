@@ -1,6 +1,7 @@
 #include "core/ModelIO.h"
 
 #include "core/SectionGeom.h"
+#include "core/I18n.h"
 
 #include <algorithm>
 #include <cctype>
@@ -187,7 +188,7 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
     int lineNo = 0;
     LoadCase* cur = nullptr;
     auto fail = [&](const std::string& msg) {
-        error = "Dòng " + std::to_string(lineNo) + ": " + msg;
+        error = trf("Dòng %d: %s", lineNo, msg.c_str());
         return false;
     };
     while (std::getline(in, line)) {
@@ -206,7 +207,7 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
                           : t[1] == "AXISYM" ? PlaneMode::Axisymmetric
                                              : PlaneMode::Stress;
         else if (k == "FLOW") {
-            if (!need(8)) return fail("FLOW thiếu tham số");
+            if (!need(8)) return fail(tr("FLOW thiếu tham số"));
             FlowDomain& f = m.flow;
             f.active = true;
             f.ax = d(1), f.ay = d(2), f.bx = d(3), f.by = d(4), f.length = d(5);
@@ -233,13 +234,13 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
             f.drainGround = d(27) != 0;
             f.drainRate = d(28, 0.01);
             f.drainMode = d(29) != 0 ? 1 : 0;
-            if (f.width() <= 0 || f.length <= 0) return fail("FLOW: kích thước miền chảy phải > 0");
+            if (f.width() <= 0 || f.length <= 0) return fail(tr("FLOW: kích thước miền chảy phải > 0"));
         }
         else if (k == "ANALYSIS") {
             if (t.size() > 2 && t[1] == "PDELTA") m.secondOrder = d(2) != 0;
         }
         else if (k == "MATERIAL") {
-            if (!need(4)) return fail("MATERIAL thiếu tham số");
+            if (!need(4)) return fail(tr("MATERIAL thiếu tham số"));
             Material x;
             x.name = t[1];
             x.E = d(2);
@@ -251,7 +252,7 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
             x.ft = d(8, 0);
             m.materials.push_back(x);
         } else if (k == "SECTION") {
-            if (!need(4)) return fail("SECTION thiếu tham số");
+            if (!need(4)) return fail(tr("SECTION thiếu tham số"));
             Section x;
             x.name = t[1];
             x.A = d(2);
@@ -281,10 +282,10 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
             }
             m.sections.push_back(x);
         } else if (k == "NODE") {
-            if (!need(3)) return fail("NODE thiếu tọa độ");
+            if (!need(3)) return fail(tr("NODE thiếu tọa độ"));
             m.nodes.push_back({d(1), d(2)});
         } else if (k == "TRUSS" || k == "FRAME") {
-            if (!need(5)) return fail(k + " thiếu tham số");
+            if (!need(5)) return fail(trf("%s thiếu tham số", k.c_str()));
             Element e;
             e.type = k == "TRUSS" ? ElemType::Truss : ElemType::Frame;
             e.n[0] = idx(1);
@@ -298,7 +299,7 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
             e.kfCompOnly = d(9) != 0;
             m.elements.push_back(e);
         } else if (k == "TRI3") {
-            if (!need(6)) return fail("TRI3 thiếu tham số");
+            if (!need(6)) return fail(tr("TRI3 thiếu tham số"));
             Element e;
             e.type = ElemType::Tri3;
             for (int i = 0; i < 3; ++i) e.n[i] = idx(1 + i);
@@ -309,13 +310,13 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
             Element e;
             e.type = k == "TRI6" ? ElemType::Tri6 : ElemType::Quad8;
             const int nc = e.nodeCount();
-            if (!need(nc + 3)) return fail(k + " thiếu tham số");
+            if (!need(nc + 3)) return fail(trf("%s thiếu tham số", k.c_str()));
             for (int i = 0; i < nc; ++i) e.n[i] = idx(1 + i);
             e.mat = idx(nc + 1);
             e.t = d(nc + 2);
             m.elements.push_back(e);
         } else if (k == "QUAD4") {
-            if (!need(7)) return fail("QUAD4 thiếu tham số");
+            if (!need(7)) return fail(tr("QUAD4 thiếu tham số"));
             Element e;
             e.type = ElemType::Quad4;
             for (int i = 0; i < 4; ++i) e.n[i] = idx(1 + i);
@@ -324,7 +325,7 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
             e.incompatible = d(7, 1) != 0;
             m.elements.push_back(e);
         } else if (k == "SUPPORT") {
-            if (!need(5)) return fail("SUPPORT thiếu tham số");
+            if (!need(5)) return fail(tr("SUPPORT thiếu tham số"));
             Support s;
             s.node = idx(1);
             for (int c = 0; c < 3; ++c) {
@@ -342,31 +343,31 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
             m.cases.push_back(lc);
             cur = &m.cases.back();
         } else if (k == "NLOAD" || k == "ELOAD" || k == "DISP") {
-            if (!cur) return fail(k + " phải nằm sau LOADCASE");
+            if (!cur) return fail(trf("%s phải nằm sau LOADCASE", k.c_str()));
             if (k == "NLOAD") {
-                if (!need(4)) return fail("NLOAD thiếu tham số");
+                if (!need(4)) return fail(tr("NLOAD thiếu tham số"));
                 cur->nodal.push_back({idx(1), {d(2), d(3), d(4)}});
             } else if (k == "DISP") {
-                if (!need(4)) return fail("DISP thiếu tham số");
+                if (!need(4)) return fail(tr("DISP thiếu tham số"));
                 PrescribedDisp p;
                 p.node = idx(1);
                 p.dof = t[2] == "UX" ? UX : t[2] == "UY" ? UY : RZ;
                 p.value = d(3);
                 cur->disp.push_back(p);
             } else {
-                if (!need(4)) return fail("ELOAD thiếu tham số");
+                if (!need(4)) return fail(tr("ELOAD thiếu tham số"));
                 ElemLoad l;
                 l.elem = idx(1);
                 const std::string& kind = t[2];
                 if (kind == "DIST") {
                     l.kind = ElemLoadKind::Distributed;
-                    if (!parseDir(t[3], l.dir)) return fail("hướng tải không hợp lệ: " + t[3]);
+                    if (!parseDir(t[3], l.dir)) return fail(tr("hướng tải không hợp lệ: ") + t[3]);
                     l.q1 = d(4);
                     l.q2 = d(5, l.q1);
                     l.projected = d(6) != 0;
                 } else if (kind == "POINT") {
                     l.kind = ElemLoadKind::Point;
-                    if (!parseDir(t[3], l.dir)) return fail("hướng tải không hợp lệ: " + t[3]);
+                    if (!parseDir(t[3], l.dir)) return fail(tr("hướng tải không hợp lệ: ") + t[3]);
                     l.q1 = d(4);
                     l.a = d(5);
                 } else if (kind == "MOMENT") {
@@ -380,7 +381,7 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
                     l.kind = ElemLoadKind::Temperature;
                     l.q1 = d(3);
                     l.q2 = d(4);
-                } else return fail("loại tải không hợp lệ: " + kind);
+                } else return fail(trf("loại tải không hợp lệ: %s", kind.c_str()));
                 cur->elem.push_back(l);
             }
         } else if (k == "COMBO") {
@@ -394,7 +395,7 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
             for (size_t i = i0; i + 1 < t.size(); i += 2) c.terms.push_back({idx(i), d(i + 1)});
             m.combos.push_back(c);
         } else {
-            return fail("từ khóa không hợp lệ: " + k);
+            return fail(trf("từ khóa không hợp lệ: %s", k.c_str()));
         }
     }
     out = std::move(m);
@@ -404,7 +405,7 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
 bool saveModel(const std::string& path, const Model& m, std::string& error) {
     std::ofstream f(path, std::ios::binary);
     if (!f) {
-        error = "Không ghi được file " + path;
+        error = trf("Không ghi được file %s", path.c_str());
         return false;
     }
     f << modelToText(m);
@@ -414,7 +415,7 @@ bool saveModel(const std::string& path, const Model& m, std::string& error) {
 bool loadModel(const std::string& path, Model& m, std::string& error) {
     std::ifstream f(path, std::ios::binary);
     if (!f) {
-        error = "Không mở được file " + path;
+        error = trf("Không mở được file %s", path.c_str());
         return false;
     }
     std::stringstream ss;
@@ -425,27 +426,27 @@ bool loadModel(const std::string& path, Model& m, std::string& error) {
 std::string resultReport(const Model& m, const AnalysisResult& r) {
     std::ostringstream o;
     char b[512];
-    o << "KẾT QUẢ TÍNH TOÁN — " << m.title << "\n";
-    o << "Đơn vị: kN, m; chuyển vị mm; góc xoay rad; ứng suất MPa\n";
+    o << trf("KẾT QUẢ TÍNH TOÁN — %s", m.title.c_str()) << "\n";
+    o << tr("Đơn vị: kN, m; chuyển vị mm; góc xoay rad; ứng suất MPa\n");
     if (!r.ok) {
-        o << "LỖI: " << r.error << "\n";
+        o << trf("LỖI: %s", r.error.c_str()) << "\n";
         return o.str();
     }
-    std::snprintf(b, sizeof b, "Số nút %zu, số phần tử %zu, số phương trình %d, profile %lld\n", m.nodes.size(),
+    std::snprintf(b, sizeof b, tr("Số nút %zu, số phần tử %zu, số phương trình %d, profile %lld\n"), m.nodes.size(),
                   m.elements.size(), r.numEquations, r.profileSize);
     o << b;
-    for (const auto& w : r.warnings) o << "Cảnh báo: " << w << "\n";
+    for (const auto& w : r.warnings) o << trf("Cảnh báo: %s", w.c_str()) << "\n";
     for (const auto& s : r.sets) {
-        o << "\n==================== " << (s.combo ? "Tổ hợp: " : "Trường hợp tải: ") << s.name << "\n";
-        std::snprintf(b, sizeof b, "Tổng tải: ΣFx = %.4f, ΣFy = %.4f | Tổng phản lực: ΣRx = %.4f, ΣRy = %.4f\n",
+        o << "\n==================== " << (s.combo ? trf("Tổ hợp: %s", s.name.c_str()) : trf("Trường hợp tải: %s", s.name.c_str())) << "\n";
+        std::snprintf(b, sizeof b, tr("Tổng tải: ΣFx = %.4f, ΣFy = %.4f | Tổng phản lực: ΣRx = %.4f, ΣRy = %.4f\n"),
                       s.sumFx, s.sumFy, s.sumRx, s.sumRy);
-        o << b << "\nCHUYỂN VỊ NÚT\n   Nút        ux(mm)        uy(mm)       φz(rad)\n";
+        o << b << "\n" << tr("CHUYỂN VỊ NÚT") << "\n" << tr("   Nút        ux(mm)        uy(mm)       φz(rad)") << "\n";
         for (size_t i = 0; i < m.nodes.size(); ++i) {
             std::snprintf(b, sizeof b, "%6zu %13.5f %13.5f %13.6e\n", i + 1, s.U[3 * i] * 1e3, s.U[3 * i + 1] * 1e3,
                           s.U[3 * i + 2]);
             o << b;
         }
-        o << "\nPHẢN LỰC\n   Nút         Rx(kN)         Ry(kN)       Mz(kNm)\n";
+        o << "\n" << tr("PHẢN LỰC") << "\n" << tr("   Nút         Rx(kN)         Ry(kN)       Mz(kNm)") << "\n";
         for (size_t i = 0; i < m.nodes.size(); ++i) {
             bool any = false;
             for (int c = 0; c < 3; ++c) any |= r.dofState[3 * i + c] == DofSupport || s.R[3 * i + c] != 0;
@@ -459,8 +460,8 @@ std::string resultReport(const Model& m, const AnalysisResult& r) {
             const BarResult& br = s.bars[e];
             if (br.x.empty()) continue;
             if (!header) {
-                o << "\nNỘI LỰC THANH (N > 0 kéo; M > 0 căng thớ dưới)\n"
-                     "   PT  Đầu       N(kN)       Q(kN)      M(kNm)   |  Mmax(kNm) tại x(m)   Mmin(kNm) tại x(m)\n";
+                o << "\n" << tr("NỘI LỰC THANH (N > 0 kéo; M > 0 căng thớ dưới)") << "\n"
+                  << tr("   PT  Đầu       N(kN)       Q(kN)      M(kNm)   |  Mmax(kNm) tại x(m)   Mmin(kNm) tại x(m)") << "\n";
                 header = true;
             }
             const size_t n = br.x.size();
@@ -476,9 +477,11 @@ std::string resultReport(const Model& m, const AnalysisResult& r) {
         for (size_t i = 0; i < m.nodes.size(); ++i) {
             if (s.nodeStressCount.empty() || s.nodeStressCount[i] == 0) continue;
             if (!header) {
-                o << (m.planeMode == PlaneMode::Axisymmetric
-                          ? "\nỨNG SUẤT TẠI NÚT (trung bình, MPa)\n   Nút        σr        σz       τrz        σθ        σ1        σ2  σ_vonMises\n"
-                          : "\nỨNG SUẤT TẠI NÚT (trung bình, MPa)\n   Nút        σx        σy       τxy        σz        σ1        σ2  σ_vonMises\n");
+                o << "\n" << tr("ỨNG SUẤT TẠI NÚT (trung bình, MPa)") << "\n"
+                  << (m.planeMode == PlaneMode::Axisymmetric
+                          ? tr("   Nút        σr        σz       τrz        σθ        σ1        σ2  σ_vonMises")
+                          : tr("   Nút        σx        σy       τxy        σz        σ1        σ2  σ_vonMises"))
+                  << "\n";
                 header = true;
             }
             const auto& v = s.nodeStress[i];

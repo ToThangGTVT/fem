@@ -1,4 +1,5 @@
 #include "capi/Json.h"
+#include "core/I18n.h"
 
 #include <cmath>
 #include <cstdio>
@@ -162,7 +163,7 @@ struct Parser {
         while (i < s.size() && (s[i] == ' ' || s[i] == '\n' || s[i] == '\r' || s[i] == '\t')) ++i;
     }
     bool fail(const char* what) {
-        if (err.empty()) err = std::string(what) + " tại vị trí " + std::to_string(i);
+        if (err.empty()) err = trf("%s tại vị trí %zu", what, i);
         return false;
     }
     bool lit(const char* w) {
@@ -182,7 +183,7 @@ struct Parser {
                 o += (char)(0x80 | ((cp >> 6) & 0x3F)), o += (char)(0x80 | (cp & 0x3F));
     }
     bool hex4(unsigned& cp) {
-        if (i + 4 > s.size()) return fail("thiếu mã \\u");
+        if (i + 4 > s.size()) return fail(tr("thiếu mã \\u"));
         cp = (unsigned)std::strtoul(s.substr(i, 4).c_str(), nullptr, 16);
         i += 4;
         return true;
@@ -195,7 +196,7 @@ struct Parser {
                 o += c;
                 continue;
             }
-            if (i >= s.size()) return fail("chuỗi chưa đóng");
+            if (i >= s.size()) return fail(tr("chuỗi chưa đóng"));
             char e = s[i++];
             switch (e) {
             case 'n': o += '\n'; break;
@@ -218,14 +219,14 @@ struct Parser {
             default: o += e;
             }
         }
-        if (i >= s.size()) return fail("chuỗi chưa đóng");
+        if (i >= s.size()) return fail(tr("chuỗi chưa đóng"));
         ++i;
         return true;
     }
     bool value(Value& v, int depth) {
-        if (depth > 64) return fail("lồng nhau quá sâu");
+        if (depth > 64) return fail(tr("lồng nhau quá sâu"));
         ws();
-        if (i >= s.size()) return fail("thiếu giá trị");
+        if (i >= s.size()) return fail(tr("thiếu giá trị"));
         char c = s[i];
         if (c == '{') {
             v.type = Value::Type::Object;
@@ -238,7 +239,7 @@ struct Parser {
                 std::string k;
                 if (!string(k)) return false;
                 ws();
-                if (i >= s.size() || s[i] != ':') return fail("cần ':'");
+                if (i >= s.size() || s[i] != ':') return fail(tr("cần ':'"));
                 ++i;
                 if (!value(v.obj[k], depth + 1)) return false;
                 ws();
@@ -247,7 +248,7 @@ struct Parser {
                     continue;
                 }
                 if (i < s.size() && s[i] == '}') return ++i, true;
-                return fail("cần ',' hoặc '}'");
+                return fail(tr("cần ',' hoặc '}'"));
             }
         }
         if (c == '[') {
@@ -264,7 +265,7 @@ struct Parser {
                     continue;
                 }
                 if (i < s.size() && s[i] == ']') return ++i, true;
-                return fail("cần ',' hoặc ']'");
+                return fail(tr("cần ',' hoặc ']'"));
             }
         }
         if (c == '"') {
@@ -281,7 +282,7 @@ struct Parser {
         const char* start = s.c_str() + i;
         char* end = nullptr;
         v.num = std::strtod(start, &end);
-        if (end == start) return fail("giá trị không hợp lệ");
+        if (end == start) return fail(tr("giá trị không hợp lệ"));
         i += (size_t)(end - start);
         return true;
     }
@@ -293,12 +294,12 @@ bool parse(const std::string& text, Value& out, std::string& error) {
     Parser p(text);
     out = Value{};
     if (!p.value(out, 0)) {
-        error = "JSON lỗi: " + p.err;
+        error = trf("JSON lỗi: %s", p.err.c_str());
         return false;
     }
     p.ws();
     if (p.i != text.size()) {
-        error = "JSON lỗi: dư ký tự tại vị trí " + std::to_string(p.i);
+        error = trf("JSON lỗi: dư ký tự tại vị trí %zu", p.i);
         return false;
     }
     return true;

@@ -20,6 +20,10 @@ extern "C" {
 
 int fem_capi_version(void);
 
+/* Ngôn ngữ của chuỗi do lõi sinh ra (thông báo lỗi, cảnh báo, báo cáo, tên bài mẫu): "vi" (mặc định), "en", "ja", "ko", "ru".
+   Áp dụng cho mọi lời gọi sau đó, trên mọi luồng. */
+void fem_set_language(const char* code);
+
 /* {"ok":true,"examples":[{"name":..., "note":...}, ...]} */
 char* fem_examples(void);
 

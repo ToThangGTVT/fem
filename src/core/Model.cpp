@@ -1,4 +1,5 @@
 #include "core/Model.h"
+#include "core/I18n.h"
 
 #include <algorithm>
 #include <cmath>
@@ -262,7 +263,7 @@ int generateCombos(Model& m, double psi1, double psi2, int maxCombos, std::strin
     }
     const int nv = (int)var.size();
     if (nv > 16) {
-        if (note) *note = "Quá nhiều tải tạm thời (> 16): chỉ sinh tổ hợp cơ bản 1.";
+        if (note) *note = tr("Quá nhiều tải tạm thời (> 16): chỉ sinh tổ hợp cơ bản 1.");
         return count;
     }
     std::vector<unsigned> masks;
@@ -295,39 +296,39 @@ int generateCombos(Model& m, double psi1, double psi2, int maxCombos, std::strin
         make(vs, psi2, "CB2");
         ++count;
     }
-    if (truncated && note) *note = "Số tổ hợp vượt giới hạn " + std::to_string(maxCombos) + " — đã cắt bớt.";
+    if (truncated && note) *note = trf("Số tổ hợp vượt giới hạn %d — đã cắt bớt.", (int)maxCombos);
     return count;
 }
 
 const char* elemTypeName(ElemType t) {
     switch (t) {
-    case ElemType::Truss: return "Thanh dàn";
-    case ElemType::Frame: return "Thanh khung";
-    case ElemType::Tri3: return "Tam giác CST";
-    case ElemType::Quad4: return "Tứ giác Q4";
-    case ElemType::Tri6: return "Tam giác T6";
-    case ElemType::Quad8: return "Tứ giác Q8";
+    case ElemType::Truss: return tr("Thanh dàn");
+    case ElemType::Frame: return tr("Thanh khung");
+    case ElemType::Tri3: return tr("Tam giác CST");
+    case ElemType::Quad4: return tr("Tứ giác Q4");
+    case ElemType::Tri6: return tr("Tam giác T6");
+    case ElemType::Quad8: return tr("Tứ giác Q8");
     }
     return "?";
 }
 
 const char* loadKindName(ElemLoadKind k) {
     switch (k) {
-    case ElemLoadKind::Distributed: return "Phân bố";
-    case ElemLoadKind::Point: return "Tập trung";
-    case ElemLoadKind::Moment: return "Mômen";
-    case ElemLoadKind::Temperature: return "Nhiệt độ";
-    case ElemLoadKind::LackOfFit: return "Chế tạo ΔL";
+    case ElemLoadKind::Distributed: return tr("Phân bố");
+    case ElemLoadKind::Point: return tr("Tập trung");
+    case ElemLoadKind::Moment: return tr("Mômen");
+    case ElemLoadKind::Temperature: return tr("Nhiệt độ");
+    case ElemLoadKind::LackOfFit: return tr("Chế tạo ΔL");
     }
     return "?";
 }
 
 const char* loadDirName(LoadDir d) {
     switch (d) {
-    case LoadDir::LocalX: return "x cục bộ";
-    case LoadDir::LocalY: return "y cục bộ";
-    case LoadDir::GlobalX: return "X tổng thể";
-    case LoadDir::GlobalY: return "Y tổng thể";
+    case LoadDir::LocalX: return tr("x cục bộ");
+    case LoadDir::LocalY: return tr("y cục bộ");
+    case LoadDir::GlobalX: return tr("X tổng thể");
+    case LoadDir::GlobalY: return tr("Y tổng thể");
     }
     return "?";
 }

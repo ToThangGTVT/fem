@@ -7,6 +7,7 @@
 
 #include "capi/ModelJson.h"
 #include "core/Examples.h"
+#include "core/I18n.h"
 #include "core/ModelIO.h"
 #include "core/Report.h"
 
@@ -31,16 +32,16 @@ char* guarded(const std::function<std::string()>& body) {
     try {
         return dup(body());
     } catch (const std::exception& e) {
-        return dup(errorStr(std::string("Lỗi nội bộ: ") + e.what()));
+        return dup(errorStr(trf("Lỗi nội bộ: %s", e.what())));
     } catch (...) {
-        return dup(errorStr("Lỗi nội bộ không xác định"));
+        return dup(errorStr(tr("Lỗi nội bộ không xác định")));
     }
 }
 
 // Đọc mô hình từ JSON; trả về false kèm JSON lỗi trong 'err'
 bool modelArg(const char* modelJson, Model& m, std::string& err) {
     if (!modelJson) {
-        err = "Thiếu mô hình";
+        err = tr("Thiếu mô hình");
         return false;
     }
     json::Value v;
@@ -67,11 +68,13 @@ extern "C" {
 
 int fem_capi_version(void) { return FEM_CAPI_VERSION; }
 
+void fem_set_language(const char* code) { setLanguage(code); }
+
 char* fem_examples(void) {
     return guarded([] {
         json::Writer w;
         w.beginObject().field("ok", true).key("examples").beginArray();
-        for (const auto& e : examples()) w.beginObject().field("name", e.name).field("note", e.note).endObject();
+        for (const auto& e : examples()) w.beginObject().field("name", tr(e.name)).field("note", tr(e.note)).endObject();
         w.endArray().endObject();
         return w.str();
     });
@@ -80,7 +83,7 @@ char* fem_examples(void) {
 char* fem_example_model(int index) {
     return guarded([index] {
         const auto& ex = examples();
-        if (index < 0 || index >= (int)ex.size()) return errorStr("Không có bài mẫu số " + std::to_string(index));
+        if (index < 0 || index >= (int)ex.size()) return errorStr(trf("Không có bài mẫu số %d", index));
         return okModel(ex[index].build());
     });
 }
@@ -89,7 +92,7 @@ char* fem_parse_fem(const char* femText) {
     return guarded([femText] {
         Model m;
         std::string err;
-        if (!femText || !modelFromText(femText, m, err)) return errorStr(femText ? err : "Thiếu nội dung file");
+        if (!femText || !modelFromText(femText, m, err)) return errorStr(femText ? err : tr("Thiếu nội dung file"));
         return okModel(m);
     });
 }

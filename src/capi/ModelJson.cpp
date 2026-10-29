@@ -1,4 +1,5 @@
 #include "capi/ModelJson.h"
+#include "core/I18n.h"
 
 #include <type_traits>
 
@@ -159,7 +160,7 @@ void writeModel(json::Writer& w, const Model& m) {
 
 bool readModel(const json::Value& v, Model& out, std::string& error) {
     if (v.type != json::Value::Type::Object) {
-        error = "Mô hình phải là đối tượng JSON";
+        error = tr("Mô hình phải là đối tượng JSON");
         return false;
     }
     Model m;
@@ -200,13 +201,13 @@ bool readModel(const json::Value& v, Model& out, std::string& error) {
         e.type = enumValue(j.getStr("type"), kElemType, ElemType::Frame);
         const auto& n = j.getArr("n");
         if ((int)n.size() < e.nodeCount()) {
-            error = "Phần tử " + std::to_string(m.elements.size()) + " thiếu nút";
+            error = trf("Phần tử %zu thiếu nút", m.elements.size());
             return false;
         }
         for (int k = 0; k < e.nodeCount(); ++k) {
             e.n[k] = (int)n[k].num;
             if (e.n[k] < 0 || e.n[k] >= nn) {
-                error = "Phần tử " + std::to_string(m.elements.size()) + " tham chiếu nút không tồn tại";
+                error = trf("Phần tử %zu tham chiếu nút không tồn tại", m.elements.size());
                 return false;
             }
         }
@@ -220,7 +221,7 @@ bool readModel(const json::Value& v, Model& out, std::string& error) {
         e.kfCompOnly = j.getBool("kfCompOnly", e.kfCompOnly);
         e.incompatible = j.getBool("incompatible", e.incompatible);
         if (e.mat < 0 || e.mat >= (int)m.materials.size() || (e.isBar() && (e.sec < 0 || e.sec >= (int)m.sections.size()))) {
-            error = "Phần tử " + std::to_string(m.elements.size()) + " tham chiếu vật liệu/tiết diện không tồn tại";
+            error = trf("Phần tử %zu tham chiếu vật liệu/tiết diện không tồn tại", m.elements.size());
             return false;
         }
         m.elements.push_back(e);

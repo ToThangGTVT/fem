@@ -1,6 +1,7 @@
 #include "core/Library.h"
 
 #include "core/SectionGeom.h"
+#include "core/I18n.h"
 
 #include <cmath>
 #include <cstdio>
@@ -64,8 +65,9 @@ const std::vector<ProfilePreset>& profilePresets() {
 }
 
 Material toMaterial(const MaterialPreset& p) {
+    // tên trong bảng có sẵn là khóa tra cứu (tiếng Việt); tên vật liệu tạo ra theo ngôn ngữ hiện tại
     Material m;
-    m.name = p.name;
+    m.name = tr(p.name);
     m.E = p.E;
     m.nu = p.nu;
     m.alpha = p.alpha;
@@ -101,7 +103,7 @@ Section rectSection(double b, double h) {
     SectionShape s;
     s.kind = ShapeKind::Rect;
     s.p = {b, h, 0, 0, 0, 0};
-    Section r = sectionFromShape(dimName("CN", {b * 100, h * 100}), s);
+    Section r = sectionFromShape(dimName(tr("CN"), {b * 100, h * 100}), s);
     // giá trị chính xác (không phụ thuộc đa giác)
     r.A = b * h;
     r.I = b * h * h * h / 12;
@@ -112,7 +114,7 @@ Section circleSection(double d) {
     SectionShape s;
     s.kind = ShapeKind::Circle;
     s.p = {d, 0, 0, 0, 0, 0};
-    Section r = sectionFromShape(dimName("Tròn D", {d * 1000}), s);
+    Section r = sectionFromShape(dimName(tr("Tròn D"), {d * 1000}), s);
     const double pi = 3.14159265358979323846;
     r.A = pi * d * d / 4;
     r.I = pi * std::pow(d, 4) / 64;
@@ -124,7 +126,7 @@ Section pipeSection(double D, double t) {
     SectionShape s;
     s.kind = ShapeKind::Pipe;
     s.p = {D, t, 0, 0, 0, 0};
-    Section r = sectionFromShape(dimName("Ống", {D * 1000, t * 1000}), s);
+    Section r = sectionFromShape(dimName(tr("Ống"), {D * 1000, t * 1000}), s);
     const double pi = 3.14159265358979323846, d = D - 2 * t;
     r.A = pi * (D * D - d * d) / 4;
     r.I = pi * (std::pow(D, 4) - std::pow(d, 4)) / 64;
@@ -140,7 +142,7 @@ Section shapeSection(ShapeKind k, const std::array<double, 6>& p) {
     switch (k) {
     case ShapeKind::Tee: n = dimName("T", {p[0] * 1000, p[1] * 1000, p[2] * 1000, p[3] * 1000}); break;
     case ShapeKind::IBeam: n = dimName("I", {p[3] * 1000, p[0] * 1000, p[1] * 1000, p[2] * 1000}); break;
-    case ShapeKind::Box: n = dimName("Hộp", {p[0] * 1000, p[1] * 1000, p[2] * 1000}); break;
+    case ShapeKind::Box: n = dimName(tr("Hộp"), {p[0] * 1000, p[1] * 1000, p[2] * 1000}); break;
     case ShapeKind::Channel: n = dimName("[", {p[1] * 1000, p[0] * 1000}); break;
     case ShapeKind::Angle: n = dimName("L", {p[0] * 1000, p[1] * 1000, p[2] * 1000}); break;
     default: n = shapeName(k);
