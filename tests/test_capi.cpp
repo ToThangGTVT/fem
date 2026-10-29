@@ -128,12 +128,72 @@ static void testLanguage() {
     fem_set_language("vi");
 }
 
+// Hệ số của trường hợp tải [lc] trong tổ hợp [c] (0 nếu không có)
+static double comboFactor(const json::Value& c, int lc) {
+    for (const auto& t : c.getArr("terms"))
+        if ((int)t.getNum("loadCase") == lc) return t.getNum("factor");
+    return 0;
+}
+
+static void testDesignCodes() {
+    json::Value codes = call(fem_design_codes());
+    expect(codes.getArr("codes").size() == 5, "5 tiêu chuẩn");
+    json::Value lib = call(fem_library("ec"));
+    const json::Value* lm = lib.find("model");
+    bool ipe = false;
+    if (lm)
+        for (const auto& s : lm->getArr("sections"))
+            if (s.getStr("name") == "IPE 300")
+                ipe = std::abs(s.getNum("A") - 53.81e-4) < 0.05e-4 && std::abs(s.getNum("I") - 8356e-8) < 20e-8;
+    expect(ipe, "thư viện EC: IPE 300 có A = 53,81 cm², I = 8356 cm⁴");
+    expect(lm && lm->getArr("materials").size() == lib.getArr("materialSources").size(), "thư viện: nguồn theo từng vật liệu");
+    expect(!call(fem_library("xx")).getBool("ok", true), "báo lỗi tiêu chuẩn không có");
+
+    // G (γf 1,1), hoạt tải (1,2), gió trái, gió phải (1,2): hai tải gió không xuất hiện đồng thời
+    const char* model = R"({"cases":[
+        {"name":"G","kind":0,"gammaF":1.1,"category":0},
+        {"name":"Q","kind":1,"gammaF":1.2,"category":1},
+        {"name":"WL","kind":1,"gammaF":1.2,"category":3},
+        {"name":"WR","kind":1,"gammaF":1.2,"category":3}]})";
+    auto combos = [&](const char* code) {
+        json::Value r = call(fem_generate_combos(model, code));
+        const json::Value* m = r.find("model");
+        return m ? m->getArr("combos") : std::vector<json::Value>{};
+    };
+    auto find = [](const std::vector<json::Value>& cs, std::initializer_list<std::pair<int, double>> want) {
+        for (const auto& c : cs) {
+            bool ok = c.getArr("terms").size() == want.size();
+            for (const auto& [lc, f] : want) ok = ok && std::abs(comboFactor(c, lc) - f) < 1e-9;
+            if (ok) return true;
+        }
+        return false;
+    };
+    const auto ec = combos("ec"); // {Q}, {WL}, {WR}, {Q, WL}×2, {Q, WR}×2
+    expect(ec.size() == 7, "EN 1990: 7 tổ hợp, nhận " + std::to_string(ec.size()));
+    expect(find(ec, {{0, 1.35}, {1, 1.5}, {2, 0.9}}), "EN 1990: 1,35G + 1,5Q + 1,5·0,6·W");
+    expect(find(ec, {{0, 1.35}, {1, 1.05}, {2, 1.5}}), "EN 1990: 1,35G + 1,5·0,7·Q + 1,5W");
+    const auto tc = combos("tcvn"); // cơ bản 1: 3; cơ bản 2: {Q, WL}, {Q, WR}
+    expect(tc.size() == 5, "TCVN: 5 tổ hợp, nhận " + std::to_string(tc.size()));
+    expect(find(tc, {{0, 1.1}, {1, 0.9 * 1.2}, {3, 0.9 * 1.2}}), "TCVN: G + 0,9(Q + W) nhân γf");
+    const auto sp = combos("sp"); // 3 tổ hợp một tải + mỗi cặp hai thứ tự
+    expect(sp.size() == 7, "СП 20: 7 tổ hợp, nhận " + std::to_string(sp.size()));
+    expect(find(sp, {{0, 1.1}, {1, 1.2}, {2, 0.9 * 1.2}}), "СП 20: G + Q + 0,9W nhân γf");
+    const auto kds = combos("kds"); // 1,4D; 1,2D + 1,6L; 1,2D + 1,3W + 1,0L ×2; 0,9D + 1,3W ×2
+    expect(kds.size() == 6, "KDS: 6 tổ hợp, nhận " + std::to_string(kds.size()));
+    expect(find(kds, {{0, 1.2}, {1, 1.0}, {3, 1.3}}), "KDS: 1,2D + 1,3W + 1,0L");
+    expect(find(kds, {{0, 0.9}, {2, 1.3}}), "KDS: 0,9D + 1,3W");
+    const auto jis = combos("jis"); // dài hạn G + P; ngắn hạn G + P + W ×2
+    expect(jis.size() == 3, "JIS: 3 tổ hợp, nhận " + std::to_string(jis.size()));
+    expect(find(jis, {{0, 1.0}, {1, 1.0}, {2, 1.0}}), "JIS: G + P + W");
+}
+
 int main() {
     testJson();
     testExamplesRoundTrip();
     testSimpleBeamValues();
     testErrors();
     testLanguage();
+    testDesignCodes();
     std::printf("capi: %d đạt, %d lỗi\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;
 }

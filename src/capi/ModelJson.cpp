@@ -118,7 +118,7 @@ void writeModel(json::Writer& w, const Model& m) {
     for (const auto& lc : m.cases) {
         w.beginObject();
         w.field("name", lc.name).field("selfWeight", lc.selfWeight).field("kind", lc.kind);
-        w.field("group", lc.group).field("gammaF", lc.gammaF);
+        w.field("group", lc.group).field("gammaF", lc.gammaF).field("category", lc.category);
         w.key("nodal").beginArray();
         for (const auto& l : lc.nodal) {
             w.beginObject().field("node", l.node);
@@ -243,6 +243,7 @@ bool readModel(const json::Value& v, Model& out, std::string& error) {
         lc.kind = j.getInt("kind", lc.kind);
         lc.group = j.getInt("group", lc.group);
         lc.gammaF = j.getNum("gammaF", lc.gammaF);
+        lc.category = j.getInt("category", lc.category);
         for (const auto& l : j.getArr("nodal")) {
             NodalLoad x;
             x.node = l.getInt("node", -1);

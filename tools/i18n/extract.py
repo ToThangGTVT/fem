@@ -19,6 +19,8 @@ def used_keys():
         keys += [unescape(m.group(1)) for m in re.finditer(r"\btrf?\(" + LIT, t)]
         if p.name == "Examples.cpp":
             keys += [unescape(x) for m in re.finditer(r'^\s*\{' + LIT + r', ' + LIT + r', \w+\},', t, re.M) for x in m.groups()]
+        if p.name == "Codes.cpp":  # bảng vật liệu theo tiêu chuẩn: {tên, nguồn, E (dạng 2.1e8), ...}
+            keys += [unescape(m.group(1)) for m in re.finditer(r'^\s*\{' + LIT + r', ' + LIT + r', [\d.]+e\d', t, re.M)]
         if p.name == "Library.cpp":
             body = t[t.index("materialPresets()"):t.index("profilePresets()")]
             keys += [unescape(m.group(1)) for m in re.finditer(r'^\s*\{' + LIT + r', ' + LIT + r', [\d.e]+', body, re.M)]

@@ -15,6 +15,7 @@ option(FEM_BUILD_TESTS "Xây dựng bộ kiểm tra lõi tính toán" ON)
 add_library(femcore STATIC
   src/core/Model.cpp
   src/core/I18n.cpp
+  src/core/Codes.cpp
   src/core/I18nStrings.cpp
   src/core/Skyline.cpp
   src/core/Elements.cpp

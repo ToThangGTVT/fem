@@ -6,6 +6,7 @@
 #include <functional>
 
 #include "capi/ModelJson.h"
+#include "core/Codes.h"
 #include "core/Examples.h"
 #include "core/I18n.h"
 #include "core/ModelIO.h"
@@ -135,6 +136,57 @@ char* fem_report_html(const char* modelJson) {
         std::string err;
         if (!modelArg(modelJson, m, err)) return errorStr(err);
         return okText("html", htmlReport(m, analyze(m)));
+    });
+}
+
+char* fem_design_codes(void) {
+    return guarded([] {
+        json::Writer w;
+        w.beginObject().field("ok", true).key("codes").beginArray();
+        for (int i = 0; i < kDesignCodeCount; ++i) {
+            const auto c = (DesignCode)i;
+            w.beginObject().field("id", codeId(c)).field("name", codeName(c)).key("gammaF").beginArray();
+            for (int k = CatDead; k <= CatSeismic; ++k) w.value(defaultGammaF(c, k));
+            w.endArray().endObject();
+        }
+        w.endArray().endObject();
+        return w.str();
+    });
+}
+
+char* fem_library(const char* code) {
+    return guarded([code] {
+        DesignCode c;
+        if (!code || !parseCode(code, c)) return errorStr(trf("Không có tiêu chuẩn \"%s\"", code ? code : ""));
+        Model lib;
+        for (const auto& p : codeMaterials(c)) lib.materials.push_back(toMaterial(p));
+        for (const auto& p : codeProfiles(c)) lib.sections.push_back(toSection(p));
+        json::Writer w;
+        w.beginObject().field("ok", true).key("model");
+        writeModel(w, lib);
+        w.key("materialSources").beginArray();
+        for (const auto& p : codeMaterials(c)) w.value(p.source);
+        w.endArray().key("sectionSources").beginArray();
+        for (const auto& p : codeProfiles(c)) w.value(p.source);
+        w.endArray().endObject();
+        return w.str();
+    });
+}
+
+char* fem_generate_combos(const char* modelJson, const char* code) {
+    return guarded([modelJson, code] {
+        Model m;
+        std::string err;
+        if (!modelArg(modelJson, m, err)) return errorStr(err);
+        DesignCode c;
+        if (!code || !parseCode(code, c)) return errorStr(trf("Không có tiêu chuẩn \"%s\"", code ? code : ""));
+        std::string note;
+        const int n = generateCodeCombos(m, c, 300, &note);
+        json::Writer w;
+        w.beginObject().field("ok", true).key("model");
+        writeModel(w, m);
+        w.field("count", n).field("note", note).endObject();
+        return w.str();
     });
 }
 

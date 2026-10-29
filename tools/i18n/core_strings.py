@@ -218,4 +218,32 @@ ROWS = [
     ("Tròn D", "Round D", "丸 D", "원형 D", "Круг D"),
     ("Ống", "Pipe", "鋼管", "강관", "Труба"),
     ("Hộp", "Box", "箱形", "박스", "Короб"),
+    # --- tiêu chuẩn thiết kế, tổ hợp tải tự sinh
+    ("TCVN (Việt Nam)", "TCVN (Vietnam)", "TCVN (ベトナム)", "TCVN (베트남)", "TCVN (Вьетнам)"),
+    ("Eurocode (EN)", "Eurocode (EN)", "ユーロコード (EN)", "유로코드 (EN)", "Еврокод (EN)"),
+    ("JIS / AIJ (Nhật Bản)", "JIS / AIJ (Japan)", "JIS / AIJ (日本)", "JIS / AIJ (일본)", "JIS / AIJ (Япония)"),
+    ("KDS / KS (Hàn Quốc)", "KDS / KS (Korea)", "KDS / KS (韓国)", "KDS / KS (한국)", "KDS / KS (Корея)"),
+    ("СП / ГОСТ (Nga)", "СП / ГОСТ (Russia)", "СП / ГОСТ (ロシア)", "СП / ГОСТ (러시아)", "СП / ГОСТ (Россия)"),
+    ('Không có tiêu chuẩn "%s"', 'Unknown design code "%s"', '設計基準「%s」はありません', '설계기준 "%s"이(가) 없습니다', 'Нет нормы «%s»'),
+    ("Cơ bản 1", "Basic 1", "基本 1", "기본 1", "Основное 1"),
+    ("Cơ bản 2", "Basic 2", "基本 2", "기본 2", "Основное 2"),
+    ("Cơ bản", "Basic", "基本", "기본", "Основное"),
+    ("Động đất", "Seismic", "地震", "지진", "Сейсмика"),
+    ("Dài hạn", "Long-term", "長期", "장기", "Длительное"),
+    ("Ngắn hạn", "Short-term", "短期", "단기", "Кратковременное"),
+    ("Quá nhiều tải tạm thời (> 14): mỗi tổ hợp chỉ xét một tải tạm thời.", "Too many variable loads (> 14): each combination takes only one variable load.", "変動荷重が多すぎます (> 14): 各組合せで変動荷重は 1 つのみ考慮します。", "변동하중이 너무 많습니다 (> 14): 각 조합에서 변동하중은 하나만 고려합니다.", "Слишком много временных нагрузок (> 14): в каждом сочетании учтена только одна временная нагрузка."),
 ]
+
+# Tên mác vật liệu trong các bảng theo tiêu chuẩn (Codes.cpp): "Thép X", "Bê tông X" dịch theo mẫu
+_MATERIAL_GRADES = {
+    "Thép": ("Steel", "鋼材", "강재", "Сталь",
+             ["CCT42", "S235", "S275", "S355", "S460", "SS400", "SN400B", "SN490B", "SM490A",
+              "SS275", "SM275", "SM355", "SM420", "С235", "С255", "С345"]),
+    "Bê tông": ("Concrete", "コンクリート", "콘크리트", "Бетон",
+                ["C20/25", "C25/30", "C30/37", "C35/45", "C40/50", "Fc21", "Fc24", "Fc27", "Fc30", "Fc36",
+                 "C21", "C24", "C27", "C30", "C35", "C40"]),
+}
+for _vi, (_en, _ja, _ko, _ru, _grades) in _MATERIAL_GRADES.items():
+    for _g in _grades:
+        ROWS.append((f"{_vi} {_g}", f"{_en} {_g}", f"{_ja} {_g}", f"{_ko} {_g}", f"{_ru} {_g}"))
+

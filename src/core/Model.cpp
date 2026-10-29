@@ -217,6 +217,11 @@ void Model::bounds(double& x0, double& y0, double& x1, double& y1) const {
     }
 }
 
+int loadCategory(const LoadCase& lc) {
+    if (lc.category >= CatDead && lc.category <= CatSeismic) return lc.category;
+    return lc.kind == 0 ? CatDead : CatLive;
+}
+
 int generateCombos(Model& m, double psi1, double psi2, int maxCombos, std::string* note) {
     m.combos.erase(std::remove_if(m.combos.begin(), m.combos.end(), [](const Combo& c) { return c.generated; }),
                    m.combos.end());

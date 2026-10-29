@@ -140,10 +140,16 @@ struct LoadCase {
     int kind = 0;          // 0: tải thường xuyên (tĩnh tải), 1: tải tạm thời (hoạt tải, gió...)
     int group = 0;         // nhóm loại trừ: các tải tạm thời cùng nhóm ≠ 0 không xuất hiện đồng thời (gió trái/phải)
     double gammaF = 1.0;   // hệ số độ tin cậy dùng khi tự sinh tổ hợp
+    int category = -1;     // loại tải (LoadCategory) dùng khi sinh tổ hợp theo tiêu chuẩn; −1: suy từ kind
     std::vector<NodalLoad> nodal;
     std::vector<ElemLoad> elem;
     std::vector<PrescribedDisp> disp; // chuyển vị cưỡng bức của gối
 };
+
+// Loại tải để sinh tổ hợp theo tiêu chuẩn (hệ số tổ hợp khác nhau theo loại)
+enum LoadCategory { CatDead = 0, CatLive = 1, CatSnow = 2, CatWind = 3, CatSeismic = 4 };
+// Loại tải của trường hợp: category nếu đã đặt, không thì kind 0 → tĩnh tải, 1 → hoạt tải
+int loadCategory(const LoadCase& lc);
 
 struct Combo {
     Combo() = default;

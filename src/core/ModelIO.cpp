@@ -149,11 +149,11 @@ std::string modelToText(const Model& m) {
     for (const auto& s : m.supports)
         o << "SUPPORT " << s.node + 1 << " " << (int)s.fix[0] << " " << (int)s.fix[1] << " " << (int)s.fix[2] << " "
           << num(s.k[0]) << " " << num(s.k[1]) << " " << num(s.k[2]) << "\n";
-    o << "\n# LOADCASE tên hệ_số_TLBT loại(0 thường xuyên, 1 tạm thời) nhóm_loại_trừ γf\n#   NLOAD nút Fx Fy Mz\n#   ELOAD pt DIST hướng q1 q2 chiếu | POINT hướng P a | MOMENT M a | TEMP t Δt | FIT ΔL\n"
+    o << "\n# LOADCASE tên hệ_số_TLBT loại(0 thường xuyên, 1 tạm thời) nhóm_loại_trừ γf loại_tải(0 tĩnh, 1 hoạt, 2 tuyết, 3 gió, 4 động đất, −1 theo loại)\n#   NLOAD nút Fx Fy Mz\n#   ELOAD pt DIST hướng q1 q2 chiếu | POINT hướng P a | MOMENT M a | TEMP t Δt | FIT ΔL\n"
          "#   DISP nút UX|UY|RZ giá_trị   (hướng: LX LY GX GY)\n";
     for (const auto& lc : m.cases) {
         o << "LOADCASE " << quote(lc.name) << " " << num(lc.selfWeight) << " " << lc.kind << " " << lc.group << " "
-          << num(lc.gammaF) << "\n";
+          << num(lc.gammaF) << " " << lc.category << "\n";
         for (const auto& l : lc.nodal)
             o << "  NLOAD " << l.node + 1 << " " << num(l.F[0]) << " " << num(l.F[1]) << " " << num(l.F[2]) << "\n";
         for (const auto& l : lc.elem) {
@@ -340,6 +340,7 @@ bool modelFromText(const std::string& text, Model& out, std::string& error) {
             lc.kind = (int)d(3, 0);
             lc.group = (int)d(4, 0);
             lc.gammaF = d(5, 1.0);
+            lc.category = (int)d(6, -1);
             m.cases.push_back(lc);
             cur = &m.cases.back();
         } else if (k == "NLOAD" || k == "ELOAD" || k == "DISP") {

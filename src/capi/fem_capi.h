@@ -16,7 +16,7 @@ extern "C" {
 #endif
 
 /* Phiên bản giao diện C; tăng khi lược đồ JSON thay đổi không tương thích. */
-#define FEM_CAPI_VERSION 1
+#define FEM_CAPI_VERSION 2
 
 int fem_capi_version(void);
 
@@ -44,6 +44,17 @@ char* fem_report_text(const char* modelJson);
 
 /* Báo cáo HTML có hình SVG: {"ok":true,"html":"..."} */
 char* fem_report_html(const char* modelJson);
+
+/* Tiêu chuẩn thiết kế: {"ok":true,"codes":[{"id":"tcvn","name":...,"gammaF":[γf tĩnh, hoạt, tuyết, gió, động đất]}, ...]}
+   (gammaF: hệ số mặc định theo loại tải; chỉ TCVN, СП dùng γf khi sinh tổ hợp) */
+char* fem_design_codes(void);
+
+/* Thư viện vật liệu và thép hình của tiêu chuẩn: {"ok":true,"model":{materials, sections},
+   "materialSources":[...], "sectionSources":[...]} */
+char* fem_library(const char* code);
+
+/* Sinh tổ hợp tải theo tiêu chuẩn (thay các tổ hợp tự sinh trước đó): {"ok":true,"model":{...},"count":n,"note":"..."} */
+char* fem_generate_combos(const char* modelJson, const char* code);
 
 void fem_free(char* s);
 
